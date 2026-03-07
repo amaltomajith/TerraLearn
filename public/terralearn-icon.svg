@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Rounded square background in Forest Green -->
+  <rect width="64" height="64" rx="14" ry="14" fill="#1A4D2E"/>
+  <!-- Sprout / leaf icon (centered, white) -->
+  <!-- Stem -->
+  <line x1="32" y1="48" x2="32" y2="28" stroke="#FAF8F3" stroke-width="3" stroke-linecap="round"/>
+  <!-- Left leaf -->
+  <path d="M32 36 C22 30 18 20 22 14 C28 14 34 22 32 36Z" fill="#4C9A2A"/>
+  <!-- Right leaf -->
+  <path d="M32 30 C42 24 48 14 44 10 C38 10 32 18 32 30Z" fill="#4C9A2A"/>
+  <!-- Stem base sprout curve -->
+  <path d="M32 44 C28 44 24 42 22 38" stroke="#FAF8F3" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+</svg>
