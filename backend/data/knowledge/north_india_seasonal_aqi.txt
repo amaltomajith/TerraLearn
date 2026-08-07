@@ -1,0 +1,16 @@
+Reference: SAFAR (System of Air Quality and Weather Forecasting and Research), TERI research on stubble burning, IIT Delhi AQI studies
+
+North India experiences two major seasonal AQI spikes that are well-documented and predictable: the post-harvest stubble burning season (October–November) and the Diwali festival period (October–November, overlapping with stubble burning).
+
+Paddy stubble burning occurs primarily in Punjab and Haryana after the kharif (monsoon) rice harvest, typically between mid-October and mid-November. Farmers burn the leftover crop residue to clear fields quickly for the subsequent Rabi wheat sowing, which must happen within a narrow window. The fires release large quantities of PM2.5, PM10, carbon monoxide, and ozone precursors. Satellite fire count data from NASA MODIS regularly shows thousands of active fire pixels in this region during the peak burning period.
+
+During peak stubble burning events, PM2.5 in Delhi and surrounding regions can reach 500–900 µg/m³ over 24-hour periods — 10 to 18 times India's CPCB NAAQS of 60 µg/m³ and 100–180 times WHO's guideline of 5 µg/m³. The pollution from Punjab and Haryana is transported to Delhi and the broader Indo-Gangetic Plain within 12–24 hours by north-westerly winds. Atmospheric inversions during autumn (cool nights trapping pollution near the surface) amplify peak concentrations significantly.
+
+The Diwali festival, concentrated in a single night of fireworks, typically adds a sharp 200–400 µg/m³ spike in PM2.5 lasting 6–12 hours in urban centres. When Diwali coincides with peak stubble burning — as it often does given the lunar calendar alignment — combined PM2.5 episodes reach extreme health hazard levels.
+
+Agricultural relevance: The AQI spike coincides with the critical Rabi crop establishment period. Evidence suggests:
+- Reduced solar radiation reaching fields due to aerosol loading (the "dimming" effect) can slow germination and seedling growth of wheat sown in November.
+- Farmers in heavily-burning zones sometimes delay wheat sowing to avoid smoke stress during delicate germination, further compressing the Rabi season.
+- In burning zones, soil quality benefits of retaining and incorporating residue (organic matter, microbial activity) are lost, increasing fertiliser requirements over time.
+
+Policy responses include financial compensation to farmers for alternative residue management (in-situ mulching, baling for biomass energy), subsidised Happy Seeder machines that sow wheat directly into standing stubble without burning, and legal penalties — though enforcement has been inconsistent given the scale and speed of the post-harvest window.

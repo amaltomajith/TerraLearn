@@ -1,0 +1,11 @@
+Reference: IPCC AR6 WGII Chapter 5 (Food, Fibre, Ecosystem Products), Lobell et al. heat stress crop research
+
+Heat stress in crops occurs when temperatures exceed the physiological optimum during critical growth stages, particularly flowering and grain fill. Even a few days of extreme heat at the right moment can devastate yield disproportionately to what season-average temperatures would predict.
+
+For wheat, the critical heat stress threshold during the grain-filling period is generally accepted as a daily maximum above 30°C or a mean temperature above 25°C. At temperatures exceeding 35°C during anthesis (flowering), pollen viability drops sharply — pollen grains desiccate in hot dry air, and fertilisation fails even if photosynthesis is intact. Each degree of mean temperature above 25°C during grain fill reduces wheat yield by approximately 3–8% depending on variety and water availability. In the Indo-Gangetic Plain, late-sown wheat (December planting or later) is particularly exposed to terminal heat stress in March–April when grain is developing.
+
+For rice, heat stress thresholds differ by stage. During the pollination and early grain fill stage (usually around heading), sustained daytime temperatures above 35°C impair pollen germination on the stigma, leading to sterile spikelets and yield loss. Night-time temperatures are also critical for rice: nights above 26°C increase dark respiration, burning photosynthate that would otherwise accumulate as grain starch. Research in tropical Asia suggests each 1°C increase in minimum night temperature reduces rice yields by 6–10%. Kharif (monsoon) rice in India is increasingly exposed to high night temperatures due to warming trends.
+
+For maize, the critical threshold for pollen shedding and silk emergence is around 35°C during flowering. Maize is particularly vulnerable to 2–3 day heat events during the narrow 1–2 week window of pollination. For cotton and soybean, sustained temperatures above 38–40°C during flowering reduce fruit/pod set.
+
+Management options for heat stress include early planting (shifting sensitive stages away from peak heat months), selecting heat-tolerant varieties, and supplemental irrigation before/during critical stages (which cools the canopy and increases humidity around flowers).

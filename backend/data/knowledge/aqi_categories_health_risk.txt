@@ -1,0 +1,15 @@
+Reference: AQI calculation methodology from CPCB India Technical Report and US EPA AQI technical assistance document
+
+The Air Quality Index (AQI) is a numerical scale that translates raw pollutant concentration measurements into a standardised index value that communicates health risk to the general public. Different countries use different AQI scales and breakpoints; the two most commonly referenced are the US EPA AQI (0–500) and the India CPCB AQI (0–500), which share a similar structure but use different pollutant concentration breakpoints reflecting their respective NAAQS.
+
+India's AQI considers six pollutants: PM2.5, PM10, NO2, SO2, CO, and O3. The index is calculated separately for each pollutant using a piecewise linear interpolation between defined concentration breakpoints and corresponding index values. The overall AQI is the maximum of all individual sub-indices (the pollutant with the worst relative performance drives the final AQI).
+
+India CPCB AQI categories and their health implications:
+- 0–50 (Good): Air quality is satisfactory. Little or no risk.
+- 51–100 (Satisfactory): Minor breathing discomfort to sensitive people (asthmatics, elderly, children).
+- 101–200 (Moderate): Breathing discomfort to those with lung disease, heart disease, and children. Sensitive people should avoid prolonged outdoor exertion.
+- 201–300 (Poor): Breathing discomfort to most people on prolonged outdoor exposure. Sensitive groups should avoid outdoor activity.
+- 301–400 (Very Poor): Respiratory illness in people on prolonged outdoor exposure. People with heart or lung disease, children, elderly should avoid outdoor exertion entirely.
+- 401–500 (Severe/Hazardous): Serious risk to all. Even healthy people should avoid all outdoor activity.
+
+For agriculture workers, any AQI above 200 (Poor) represents a meaningful occupational health risk during extended outdoor work, particularly for tasks involving physical exertion such as harvesting, ploughing, or pesticide spraying. At AQI above 300, even short-duration outdoor agricultural work carries significant respiratory health risk, and protective equipment (N95 masks rated for particulate filtration) is advisable.

@@ -1,0 +1,13 @@
+Reference: FAO Agroclimatology guidelines; ICAR guidelines on integrated crop management for climate adaptation in India
+
+Integrated crop management under variable air quality and climate conditions requires combining knowledge of environmental thresholds with flexible agronomic decision-making. The following principles apply to field operations in regions experiencing elevated pollution and climate variability.
+
+Timing of field operations: When AQI is in the Moderate to Poor range (101–300), farm workers engaged in labour-intensive outdoor tasks face cumulative respiratory exposure risk. Best practice is to schedule strenuous tasks (manual weeding, harvesting, transplanting) during early morning hours (before 10 AM) when photochemical ozone has not yet built up, and surface temperature inversions from the night are breaking up, briefly improving air quality. Midday and afternoon outdoor work during high-ozone days is the highest-risk period.
+
+Irrigation decisions: High-temperature days that coincide with elevated AQI are often accompanied by low relative humidity, increasing evapotranspiration demand. Supplemental irrigation during heat-stress events (above 35°C for wheat, 38°C for other crops) can provide cooling benefit by increasing canopy humidity. However, over-irrigation on already-waterlogged soils following intense rainfall events can cause root anoxia and disease pressure.
+
+Fertilisation under pollution stress: Crops exposed to high ozone concentrations show altered nitrogen use efficiency. Chronic ozone stress reduces the amount of photosynthate available to drive root uptake and assimilation. This can make split nitrogen application (smaller doses at more frequent intervals) more effective than single large applications, as it avoids nitrogen waste when plant uptake capacity is suppressed by pollution damage.
+
+Crop selection responses to local AQI patterns: Farmers in high-ozone zones may benefit from selecting cultivars bred for ozone tolerance, particularly for wheat (varieties with high antioxidant enzyme expression show measurably lower yield penalties under ozone stress). For areas with chronic PM from industrial or traffic sources, selecting varieties with smoother, waxy leaf surfaces reduces PM deposition and the associated light-interception penalty.
+
+Monitoring integration: Combining real-time AQI data (from CPCB CAAQMS stations or low-cost sensors) with hyperlocal weather forecasting allows proactive scheduling of pesticide spray operations on lower-wind, lower-AQI days, reducing both worker exposure and spray drift losses.

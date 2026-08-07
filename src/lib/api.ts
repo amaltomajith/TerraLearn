@@ -6,6 +6,37 @@ export interface ClimateData {
   humidity: number; // %
 }
 
+export interface AirQualityData {
+  current: {
+    pm2_5: number;
+    pm10: number;
+    ozone: number;
+    nitrogenDioxide: number;
+    sulphurDioxide: number;
+    carbonMonoxide: number;
+    usAqi: number;
+  };
+  hourly: {
+    time: string[];
+    pm2_5: number[];
+    pm10: number[];
+    ozone: number[];
+    nitrogenDioxide: number[];
+    sulphurDioxide: number[];
+    carbonMonoxide: number[];
+    usAqi: number[];
+  };
+}
+
+export interface ClimateTrendsData {
+  daily: {
+    time: string[];
+    temperature2mMean: number[];
+    precipitationSum: number[];
+  };
+}
+
+
 export interface SoilData {
   pH: number;
   nitrogen: number; // ppm
@@ -334,6 +365,8 @@ const CURRENCY_MAP: Record<string, { symbol: string; code: string; rate: number 
 const climateCache = new Map<string, ClimateData>();
 const soilCache = new Map<string, SoilData>();
 const locationCache = new Map<string, LocationInfo>();
+const airQualityCache = new Map<string, AirQualityData>();
+const climateTrendsCache = new Map<string, ClimateTrendsData>();
 
 function coordKey(lat: number, lng: number): string {
   return `${Math.round(lat * 100) / 100},${Math.round(lng * 100) / 100}`;
@@ -470,6 +503,109 @@ export async function fetchClimateData(lat: number, lng: number, plantingDate?: 
     throw new Error('Unable to fetch climate data');
   }
 }
+
+// Fetch air quality data from Open-Meteo Air Quality API
+export async function fetchAirQualityData(lat: number, lng: number): Promise<AirQualityData> {
+  const key = coordKey(lat, lng);
+  const cached = airQualityCache.get(key);
+  if (cached) return cached;
+
+  try {
+    const response = await fetch(
+      `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}&hourly=pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide,us_aqi&current=pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide,us_aqi&timezone=auto`
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch air quality data');
+    }
+
+    const data = await response.json();
+    const hourly = data.hourly || {};
+
+    const lastIdx = hourly.time?.length ? hourly.time.length - 1 : 0;
+
+    const currentData = {
+      pm2_5: Math.round((data.current?.pm2_5 ?? hourly.pm2_5?.[lastIdx] ?? 0) * 10) / 10,
+      pm10: Math.round((data.current?.pm10 ?? hourly.pm10?.[lastIdx] ?? 0) * 10) / 10,
+      ozone: Math.round((data.current?.ozone ?? hourly.ozone?.[lastIdx] ?? 0) * 10) / 10,
+      nitrogenDioxide: Math.round((data.current?.nitrogen_dioxide ?? hourly.nitrogen_dioxide?.[lastIdx] ?? 0) * 10) / 10,
+      sulphurDioxide: Math.round((data.current?.sulphur_dioxide ?? hourly.sulphur_dioxide?.[lastIdx] ?? 0) * 10) / 10,
+      carbonMonoxide: Math.round((data.current?.carbon_monoxide ?? hourly.carbon_monoxide?.[lastIdx] ?? 0) * 10) / 10,
+      usAqi: Math.round(data.current?.us_aqi ?? hourly.us_aqi?.[lastIdx] ?? 0),
+    };
+
+    const hourlyData = {
+      time: hourly.time || [],
+      pm2_5: (hourly.pm2_5 || []).map((v: number | null) => (v != null ? Math.round(v * 10) / 10 : 0)),
+      pm10: (hourly.pm10 || []).map((v: number | null) => (v != null ? Math.round(v * 10) / 10 : 0)),
+      ozone: (hourly.ozone || []).map((v: number | null) => (v != null ? Math.round(v * 10) / 10 : 0)),
+      nitrogenDioxide: (hourly.nitrogen_dioxide || []).map((v: number | null) => (v != null ? Math.round(v * 10) / 10 : 0)),
+      sulphurDioxide: (hourly.sulphur_dioxide || []).map((v: number | null) => (v != null ? Math.round(v * 10) / 10 : 0)),
+      carbonMonoxide: (hourly.carbon_monoxide || []).map((v: number | null) => (v != null ? Math.round(v * 10) / 10 : 0)),
+      usAqi: (hourly.us_aqi || []).map((v: number | null) => (v != null ? Math.round(v) : 0)),
+    };
+
+    const result: AirQualityData = {
+      current: currentData,
+      hourly: hourlyData,
+    };
+
+    airQualityCache.set(key, result);
+    return result;
+  } catch (error) {
+    console.error('Air Quality API error:', error);
+    throw new Error('Unable to fetch air quality data');
+  }
+}
+
+// Fetch historical climate trends for the past 5 years from Open-Meteo Archive API
+export async function fetchClimateTrends(lat: number, lng: number): Promise<ClimateTrendsData> {
+  const key = coordKey(lat, lng);
+  const cached = climateTrendsCache.get(key);
+  if (cached) return cached;
+
+  try {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setFullYear(startDate.getFullYear() - 5);
+
+    const formatDate = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const startStr = formatDate(startDate);
+    const endStr = formatDate(endDate);
+
+    const response = await fetch(
+      `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${startStr}&end_date=${endStr}&daily=temperature_2m_mean,precipitation_sum&timezone=auto`
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch climate trends');
+    }
+
+    const data = await response.json();
+    const daily = data.daily || {};
+
+    const result: ClimateTrendsData = {
+      daily: {
+        time: daily.time || [],
+        temperature2mMean: (daily.temperature_2m_mean || []).map((v: number | null) => (v != null ? Math.round(v * 10) / 10 : 0)),
+        precipitationSum: (daily.precipitation_sum || []).map((v: number | null) => (v != null ? Math.round(v * 10) / 10 : 0)),
+      },
+    };
+
+    climateTrendsCache.set(key, result);
+    return result;
+  } catch (error) {
+    console.error('Climate Trends API error:', error);
+    throw new Error('Unable to fetch climate trends');
+  }
+}
+
 
 // Fetch real soil data from ISRIC SoilGrids API (free, no API key required)
 export async function fetchSoilData(lat: number, lng: number): Promise<SoilData> {

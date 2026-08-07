@@ -1,0 +1,15 @@
+Reference: India CPCB National Ambient Air Quality Standards (NAAQS), notified under Environment (Protection) Act 1986, revised 2009
+
+India's Central Pollution Control Board (CPCB) sets National Ambient Air Quality Standards that define legally permissible concentration limits for outdoor air pollutants. These standards apply to all industrial, residential, rural, and sensitive zones, though specific sensitive areas like hospitals and schools have tighter limits.
+
+For PM2.5, the CPCB annual mean standard is 40 µg/m³ and the 24-hour standard is 60 µg/m³. Sensitive areas (hospitals, schools) are held to 20 µg/m³ annually and 30 µg/m³ daily. These thresholds are considerably more permissive than WHO guidelines — the Indian annual standard is 8 times higher than WHO's 5 µg/m³ — reflecting India's development stage and the difficulty of achieving tighter limits across a large population.
+
+For PM10, India's annual mean standard is 60 µg/m³ and the 24-hour standard is 100 µg/m³. Sensitive zones apply 50 µg/m³ and 75 µg/m³ respectively.
+
+For nitrogen dioxide (NO2), the annual mean is 40 µg/m³ and the 24-hour mean is 80 µg/m³. Sensitive areas are pegged at 20 µg/m³ and 40 µg/m³.
+
+For ozone (O3), India's 8-hour standard is 100 µg/m³, compared to WHO's 60 µg/m³. India does not yet enforce an annual ozone standard.
+
+For sulphur dioxide (SO2), the annual mean is 50 µg/m³ and the 24-hour mean is 80 µg/m³.
+
+These standards are enforced through state pollution control boards, which issue consent orders and can impose closure notices on violating industrial units. However, enforcement capacity varies significantly by state, and nonattainment cities — those persistently exceeding standards — are the focus of India's National Clean Air Programme.

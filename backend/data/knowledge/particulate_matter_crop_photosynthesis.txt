@@ -1,0 +1,13 @@
+Reference: Research on particulate matter deposition effects on plant physiology, including Prusty et al. and FAO crop-environmental quality studies
+
+Particulate matter (PM) affects crops through a physical mechanism quite different from gaseous pollutants like ozone. Rather than entering through stomata, particles deposit on the external surfaces of leaves and accumulate over time, particularly during periods of low rainfall or wind.
+
+The primary pathway of impact is light interception. A layer of PM on the upper leaf surface reflects or absorbs incoming solar radiation before it reaches the photosynthetically active cells beneath. Studies on crops near industrial zones and roads have documented photosynthetic rate reductions of 15–40% under heavy PM deposition, directly reducing the plant's ability to fix carbon and build yield.
+
+Stomatal clogging is a secondary mechanism. Fine particles (especially PM2.5 and sub-micron fractions) can physically block or partially obstruct stomatal apertures, impeding both CO2 uptake and transpiration. Reduced transpiration under heat stress is particularly damaging since transpirational cooling is a key mechanism plants use to protect leaf tissue from temperature damage.
+
+Heavy metals carried by industrial PM (lead, cadmium, arsenic, chromium) accumulate in soil over multiple seasons and can be taken up by crop roots. This creates food safety concerns in addition to direct yield impacts. Leafy vegetables and root crops are most vulnerable to direct foliar absorption and uptake via roots respectively.
+
+PM deposition is higher close to roads, industrial zones, and quarries. Wind direction, particle size distribution, and surface characteristics (waxy leaves retain less than rough leaves) all affect deposition rates. Rainfall effectively washes PM off leaf surfaces, which is why crops near pollution sources show the strongest effects during dry spells.
+
+In North India's post-harvest stubble burning season (October–November), PM2.5 concentrations can reach 300–500 µg/m³ for days at a time. While winter crops are not yet at photosynthetically sensitive stages, the suppression of solar radiation reaching the surface (a "brown cloud" effect) can delay germination and establishment of Rabi crops sown in November.

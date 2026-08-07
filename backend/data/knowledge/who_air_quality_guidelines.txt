@@ -1,0 +1,13 @@
+Reference: WHO Global Air Quality Guidelines 2021 (WHO/EURO:2021-4436-43576-61371)
+
+The World Health Organization published updated air quality guidelines in 2021 that significantly tightened previous thresholds, reflecting the growing body of evidence linking air pollution to cardiovascular and respiratory disease even at lower concentrations than previously assumed.
+
+For fine particulate matter (PM2.5), WHO recommends an annual mean concentration not exceeding 5 µg/m³ and a 24-hour mean not exceeding 15 µg/m³. These values are stricter than the previous 2005 guidelines of 10 µg/m³ annual and 25 µg/m³ daily. PM2.5 particles penetrate deep into the lung alveoli and can enter the bloodstream, causing systemic inflammation.
+
+For coarse particulate matter (PM10), the recommended limits are 15 µg/m³ annual mean and 45 µg/m³ 24-hour mean. These represent a 50% reduction from the 2005 limits of 20 µg/m³ and 50 µg/m³ respectively.
+
+For nitrogen dioxide (NO2), the annual guideline is 10 µg/m³ and the 24-hour mean is 25 µg/m³. NO2 is a primary pollutant emitted by combustion engines and industrial sources. Chronic exposure causes airways to become inflamed and increases susceptibility to respiratory infections.
+
+For ground-level ozone (O3), WHO recommends a peak season mean of 60 µg/m³ (approximately 8-hour maximum daily average). Ozone is a secondary pollutant formed by photochemical reactions between NOx and volatile organic compounds in sunlight.
+
+WHO acknowledges that no safe threshold exists for many of these pollutants — even below these guideline levels, health risks are not zero. The guidelines therefore represent a practical policy target informed by current evidence about disease burden at different concentration levels. Countries are expected to use these as aspirational targets and implement phased national standards according to their economic and technical capacity.

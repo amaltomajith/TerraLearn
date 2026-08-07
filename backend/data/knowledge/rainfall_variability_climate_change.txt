@@ -1,0 +1,13 @@
+Reference: IPCC AR6 WGI Chapter 8 (Water Cycle), FAO The State of Food and Agriculture 2020, ICAR climate-smart agriculture research
+
+Rainfall variability is one of the most consequential dimensions of climate change for agriculture, affecting when farmers can plant, how much water is available through the growing season, and how often destructive events like floods or droughts disrupt crop development.
+
+In South Asia and many tropical regions, climate change is not simply reducing total rainfall — it is making it more erratic. Research shows that while some regions are seeing modest increases in annual precipitation totals, the same rainfall is often delivered in fewer, more intense events with longer dry intervals in between. This "drying on the margins, wetting in the extremes" pattern creates twin problems: waterlogging stress from intense rain events and moisture stress during extended dry spells within the same season.
+
+For planting decisions, farmers traditionally use the onset of the monsoon as a key signal. The date of reliable monsoon onset has become harder to predict due to higher interannual variability and changes in the large-scale circulation patterns (like the Madden-Julian Oscillation) that influence Indian monsoon dynamics. False onset events — brief early rains followed by a dry spell — cause significant losses when farmers sow too early based on the initial rains and their seedlings die.
+
+Rainfall variability affects crop choice: in years with predicted below-normal monsoon (signalled by La Niña-to-El Niño transitions or Indian Ocean Dipole patterns), farmers in dryland areas often shift toward drought-tolerant crops like pearl millet, sorghum, or pulses rather than water-intensive paddy. This adaptive behaviour, while rational, can reduce food production of staple cereals.
+
+In irrigated areas, groundwater drawdown is accelerating in regions like Punjab and Haryana due to water-intensive paddy cultivation combined with reduced monsoon recharge. Climate projections suggest both glacial melt-fed river systems (used for canal irrigation) and monsoon recharge zones face disruption, creating medium-term water availability risk even where infrastructure currently exists.
+
+Long-term planning implications include shifting crop calendars by 1–3 weeks in many South Asian regions, greater use of short-duration varieties that compress the growing period into lower-risk months, and integration of seasonal weather forecasts into district-level agricultural advisories.

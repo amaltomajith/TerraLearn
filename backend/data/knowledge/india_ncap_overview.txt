@@ -1,0 +1,11 @@
+Reference: India National Clean Air Programme (NCAP), launched January 2019, MoEFCC
+
+India's National Clean Air Programme (NCAP) was launched by the Ministry of Environment, Forest and Climate Change (MoEFCC) in January 2019 as the country's first national air quality improvement initiative. It operates under a time-bound framework targeting measurable reductions in particulate matter concentrations.
+
+The original target was a 20–30% reduction in PM2.5 and PM10 concentrations by 2024 compared to 2017 baseline levels. In 2022, the government revised this target upward to a 40% reduction by 2026, signalling stronger policy ambition. The programme identifies 131 non-attainment cities — urban areas that have consistently exceeded CPCB NAAQS for more than five years based on ambient air quality monitoring data.
+
+NCAP allocates funds to these cities through the 15th Finance Commission grants, which are tied to demonstrated improvements in air quality metrics. Cities must submit City Action Plans detailing sector-specific emission reduction strategies covering transport, construction dust, industrial pollution, waste burning, and domestic solid-fuel combustion.
+
+Key implementation elements include expanding the air quality monitoring network (CAAQMS — continuous ambient air quality monitoring stations), strengthening real-time data sharing on the SAMEER portal, and improving emission inventories. The programme emphasises source apportionment studies to identify which sectors contribute most to PM pollution in each city, as this varies significantly — Delhi's pollution is heavily shaped by vehicles and seasonal stubble burning, while Ahmedabad has large industrial contributions.
+
+Agriculture's indirect role in NCAP targets is significant: open field burning of crop residues (especially paddy stubble in Punjab and Haryana after the kharif harvest) is a major seasonal source of PM2.5 and PM10 spikes in the Indo-Gangetic Plain. NCAP funds some crop residue management schemes, though the primary policy lever for stubble burning remains state government compensation and in-situ management mandates.

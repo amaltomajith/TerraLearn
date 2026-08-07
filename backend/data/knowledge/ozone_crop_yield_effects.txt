@@ -1,0 +1,13 @@
+Reference: Research literature on tropospheric ozone effects on crops, including UNECE/CLRTAP mapping manual and Ainsworth et al. (2012)
+
+Ground-level (tropospheric) ozone is one of the most damaging air pollutants affecting agricultural productivity globally. Unlike PM or NO2, ozone damages crops directly by entering leaf tissue through stomata — the small pores plants use to exchange gases during photosynthesis.
+
+Once inside the leaf, ozone degrades chloroplast membranes and disrupts the biochemical machinery of photosynthesis. It accelerates leaf aging (senescence), reduces the area of functional leaf tissue, and triggers production of reactive oxygen species that interfere with carbon assimilation. The result is reduced dry matter accumulation and ultimately lower grain yield.
+
+Wheat is the most widely studied ozone-sensitive crop. Field studies and open-top chamber experiments in South Asia suggest that current ambient ozone levels in the Indo-Gangetic Plain (where background concentrations routinely reach 50–80 ppb during the spring wheat season) cause yield losses of 10–30% relative to clean-air controls. Some modelling studies place cumulative losses in India's wheat production at several million tonnes per year.
+
+Rice (paddy) is somewhat less ozone-sensitive than wheat due to partially closed stomata during portions of the day, but is not immune. Ambient ozone levels in the Kharif (June–October) rice growing season in northern and eastern India are typically lower than the spring Rabi season, but elevated ozone still reduces yields by an estimated 5–15% in high-exposure regions.
+
+Soybean is extremely sensitive to ozone. North American and European research consistently shows 15–30% yield reductions at ozone concentrations of 60–70 ppb sustained over a growing season. Soybean's high stomatal conductance makes it more vulnerable than most cereals.
+
+Agronomic relevance: ozone damage cannot be reversed by irrigation or fertiliser, making it distinct from most other yield stressors. The main management tools are early planting (to shift the sensitive flowering and grain fill period away from peak ozone months) and selection of tolerant varieties. Avoiding irrigated crops during high-ozone daytime hours is sometimes recommended for very sensitive crops.
