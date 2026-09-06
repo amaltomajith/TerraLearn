@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils';
 
 const TABS = [
   { to: 'feed', label: 'Feed' },
-  { to: 'map', label: 'Map' },
   { to: 'listings', label: 'My listings' },
   { to: 'messages', label: 'Messages' },
   { to: 'buyer', label: 'Buyer desk' },

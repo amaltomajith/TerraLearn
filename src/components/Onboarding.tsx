@@ -1,14 +1,34 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { toast } from 'sonner';
 import { Navigation } from './Navigation';
 import NavAuthControl from './saath/NavAuthControl';
 import { MapView } from './MapView';
-import { ENTERPRISES } from '@/lib/saath/ifsMatrix';
-import { createProfileWithFarm } from '@/lib/saath/queries';
+import { ENTERPRISES, enterpriseLabel } from '@/lib/saath/ifsMatrix';
+import { createProfileWithFarm, getMapPoints } from '@/lib/saath/queries';
+import { haversineMeters } from '@/lib/saath/distance';
 import { useIdentity } from '@/lib/identity/identity';
 import { cn } from '@/lib/utils';
-import type { FarmerRole } from '@/lib/saath/types';
+import type { FarmerRole, MapPointRow } from '@/lib/saath/types';
+
+const NEARBY_RADIUS_M = 20_000;
+
+/** Enterprise keys of `theirs` that have an IFS output↔input relationship with `mine`. */
+function ifsMatchedEnterprises(mine: string[], theirs: string[]): string[] {
+  const out = new Set<string>();
+  for (const a of mine) {
+    const ai = ENTERPRISES[a];
+    if (!ai) continue;
+    for (const b of theirs) {
+      const bi = ENTERPRISES[b];
+      if (!bi) continue;
+      const supply = ai.outputs.some((o) => bi.inputs.includes(o));
+      const need = bi.outputs.some((o) => ai.inputs.includes(o));
+      if (supply || need) out.add(b);
+    }
+  }
+  return [...out];
+}
 
 const MANDYA = { lat: 12.5223, lng: 76.8954 };
 
@@ -36,9 +56,35 @@ export function Onboarding() {
   const [pos, setPos] = useState<{ lat: number; lng: number } | null>(MANDYA);
   const [geo, setGeo] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [nearby, setNearby] = useState<MapPointRow[]>([]);
 
   const isFarmer = role === 'farmer' || role === 'both';
   const isBuyer = role === 'buyer' || role === 'both';
+
+  useEffect(() => {
+    getMapPoints(null)
+      .then(setNearby)
+      .catch(() => setNearby([]));
+  }, []);
+
+  const within = useMemo(() => {
+    if (!pos) return [];
+    return nearby.filter(
+      (p) =>
+        p.lat != null &&
+        p.lng != null &&
+        haversineMeters(pos.lat, pos.lng, p.lat, p.lng) <= NEARBY_RADIUS_M,
+    );
+  }, [pos, nearby]);
+
+  const matchedLabels = useMemo(() => {
+    if (!isFarmer || enterprises.length === 0 || within.length === 0) return [];
+    const set = new Set<string>();
+    for (const p of within) {
+      for (const k of ifsMatchedEnterprises(enterprises, p.enterprises ?? [])) set.add(k);
+    }
+    return [...set].slice(0, 2).map(enterpriseLabel);
+  }, [within, enterprises, isFarmer]);
 
   function toggleEnterprise(k: string) {
     setEnterprises((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
@@ -204,9 +250,23 @@ export function Onboarding() {
                 onGeolocate={geolocate}
                 isGeolocating={geo}
                 locationLabel={village || 'Your farm'}
+                neighbours={within}
                 initialView={{ center: [MANDYA.lat, MANDYA.lng], zoom: 11 }}
               />
             </div>
+            {within.length > 0 && (
+              <div className="mt-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm">
+                <span className="font-semibold text-foreground">
+                  {within.length} {within.length === 1 ? 'farmer' : 'farmers'} registered near you
+                </span>
+                {matchedLabels.length > 0 && (
+                  <span className="text-muted-foreground">
+                    {' '}
+                    — {matchedLabels.join(' & ')} nearby can trade with your setup.
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <button

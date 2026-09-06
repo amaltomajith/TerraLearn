@@ -32,7 +32,7 @@ export function Navigation({ authSlot }: { authSlot?: ReactNode }) {
 
           <div className="hidden sm:flex items-center gap-4 pl-2">
             <NavLink to="/" end className={linkClass}>
-              Simulator
+              Home
             </NavLink>
             <NavLink to="/saath" className={linkClass}>
               Saath

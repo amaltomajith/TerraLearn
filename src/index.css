@@ -115,17 +115,35 @@
     .dark body::before {
       opacity: 0.015;
     }
-    /* Fix for Leaflet map */
-    .leaflet-container {
-      z-index: 1;
+    /* MapLibre GL — match the Earthy theme */
+    .maplibregl-map {
       font-family: 'Manrope', sans-serif;
     }
-    .leaflet-control-zoom {
-      border: none !important;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.12) !important;
+    .maplibregl-popup-content {
+      background: hsl(var(--card));
+      color: hsl(var(--card-foreground));
+      border: 1px solid hsl(var(--border));
+      border-radius: 0.6rem;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+      padding: 10px 12px;
     }
-    .leaflet-control-zoom a {
-      border-radius: 6px !important;
+    .maplibregl-popup-close-button {
+      color: hsl(var(--muted-foreground));
+      font-size: 15px;
+      padding: 0 4px;
+    }
+    .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: hsl(var(--card)); }
+    .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: hsl(var(--card)); }
+    .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: hsl(var(--card)); }
+    .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: hsl(var(--card)); }
+    .maplibregl-ctrl-group {
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14) !important;
+      border-radius: 8px !important;
+      overflow: hidden;
+    }
+    .maplibregl-ctrl-attrib {
+      font-size: 10px;
     }
   }
 
