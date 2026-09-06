@@ -1,7 +1,13 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Navigation } from './Navigation';
-import { MapCard } from './MapCard';
+import NavAuthControl from './saath/NavAuthControl';
+import { MapView } from './MapView';
+import { FarmSwitcher } from './FarmSwitcher';
+import { useIdentity } from '@/lib/identity/identity';
+import { getMapPoints } from '@/lib/saath/queries';
+import type { MapPointRow } from '@/lib/saath/types';
 import { CropSelector } from './CropSelector';
 import { DateSelector } from './DateSelector';
 import { MetricCard } from './MetricCard';
@@ -55,7 +61,11 @@ import {
 import { toast } from 'sonner';
 
 function Home() {
+  const navigate = useNavigate();
+  const { activeFarmerId: farmerId, primaryFarm } = useIdentity();
+
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [neighbours, setNeighbours] = useState<MapPointRow[]>([]);
   const [selectedCrop, setSelectedCrop] = useState('');
   const [plantingDate, setPlantingDate] = useState<Date>();
   const [areaHectares, setAreaHectares] = useState<number>(1);
@@ -144,6 +154,37 @@ function Home() {
       }
     );
   };
+
+  // Saath neighbours shown as an overlay on the farm map.
+  const refetchNeighbours = useCallback(() => {
+    if (!farmerId) {
+      setNeighbours([]);
+      return;
+    }
+    getMapPoints(farmerId)
+      .then(setNeighbours)
+      .catch(() => setNeighbours([]));
+  }, [farmerId]);
+
+  useEffect(() => {
+    refetchNeighbours();
+  }, [refetchNeighbours]);
+
+  // Start the pin on the farmer's primary farm (once).
+  const seededPinRef = useRef(false);
+  useEffect(() => {
+    if (seededPinRef.current || position || !primaryFarm) return;
+    seededPinRef.current = true;
+    handlePositionChange(primaryFarm.lat, primaryFarm.lng);
+  }, [primaryFarm, position, handlePositionChange]);
+
+  const mapInitialView = useMemo(
+    () =>
+      primaryFarm
+        ? { center: [primaryFarm.lat, primaryFarm.lng] as [number, number], zoom: 10 }
+        : undefined,
+    [primaryFarm],
+  );
 
   const handleSimulate = async () => {
     if (!position || !selectedCrop || !plantingDate) {
@@ -315,7 +356,7 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-background relative">
-      <Navigation />
+      <Navigation authSlot={<NavAuthControl />} />
 
       <main className="pt-24 pb-20 px-4 sm:px-6 max-w-[1600px] mx-auto">
         {/* Hero Section */}
@@ -391,12 +432,20 @@ function Home() {
             <div className="grid grid-cols-1 lg:grid-cols-[1.2fr,1fr] gap-6 lg:gap-8">
               {/* Left Column */}
               <div className="space-y-6">
-                <MapCard
-                  position={position}
-                  onPositionChange={handlePositionChange}
-                  onGeolocation={handleGeolocation}
+                <MapView
+                  value={position}
+                  onChange={handlePositionChange}
+                  onGeolocate={handleGeolocation}
                   isGeolocating={isGeolocating}
                   locationLabel={locationInfo?.country}
+                  neighbours={neighbours}
+                  onNeighbourClick={(id) => navigate(`/saath/profile/${id}`)}
+                  initialView={mapInitialView}
+                />
+                <FarmSwitcher
+                  pin={position}
+                  onPick={handlePositionChange}
+                  onFarmsChanged={refetchNeighbours}
                 />
 
                 {/* Climate & Soil Metrics */}
@@ -639,12 +688,15 @@ function Home() {
           <TabsContent value="trends" className="mt-0 space-y-8">
             {/* Map location picker for trends tab */}
             <div className="space-y-6">
-              <MapCard
-                position={position}
-                onPositionChange={handlePositionChange}
-                onGeolocation={handleGeolocation}
+              <MapView
+                value={position}
+                onChange={handlePositionChange}
+                onGeolocate={handleGeolocation}
                 isGeolocating={isGeolocating}
                 locationLabel={locationInfo?.country}
+                neighbours={neighbours}
+                onNeighbourClick={(id) => navigate(`/saath/profile/${id}`)}
+                initialView={mapInitialView}
               />
 
               {/* No position state notice */}

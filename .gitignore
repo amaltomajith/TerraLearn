@@ -42,6 +42,10 @@ venv/
 
 core
 
+# Saath account-provisioning secrets + generated credentials
+scripts/.artifacts/
+.env.seed-accounts.local
+
 .github/
 
 **/tempobook/**

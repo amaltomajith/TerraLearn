@@ -1,27 +1,42 @@
-import { Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
-import Home from "./components/home";
+import { ClerkProvider, ClerkLoaded, ClerkLoading } from "@clerk/clerk-react";
 import { ThemeProvider } from "./components/ThemeProvider";
+import { BrandSplash } from "./components/BrandSplash";
+import { hasClerk, hasSupabase } from "./lib/saath/config";
+import { UnconfiguredApp } from "./auth/UnconfiguredApp";
+import { RootGate } from "./auth/RootGate";
+import { SignInPage, SignUpPage } from "./auth/AuthPages";
+import { clerkAppearance } from "./components/saath/clerkAppearance";
+
+const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
 function App() {
   return (
     <ThemeProvider>
-      <Suspense fallback={
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 border-3 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-foreground font-medium">Loading TerraLearn...</span>
-          </div>
-        </div>
-      }>
-        <>
-          <Toaster position="top-right" richColors theme="system" />
-          <Routes>
-            <Route path="/" element={<Home />} />
-          </Routes>
-        </>
-      </Suspense>
+      <Toaster position="top-right" richColors theme="system" />
+      {!hasClerk || !hasSupabase ? (
+        <UnconfiguredApp />
+      ) : (
+        <ClerkProvider
+          publishableKey={clerkKey as string}
+          appearance={clerkAppearance}
+          signInUrl="/sign-in"
+          signUpUrl="/sign-up"
+          afterSignOutUrl="/sign-in"
+        >
+          <ClerkLoading>
+            <BrandSplash />
+          </ClerkLoading>
+          <ClerkLoaded>
+            <Routes>
+              <Route path="/sign-in/*" element={<SignInPage />} />
+              <Route path="/sign-up/*" element={<SignUpPage />} />
+              <Route path="/*" element={<RootGate />} />
+            </Routes>
+          </ClerkLoaded>
+        </ClerkProvider>
+      )}
     </ThemeProvider>
   );
 }
