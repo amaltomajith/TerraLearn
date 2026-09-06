@@ -304,3 +304,16 @@ as $$
   from farmers f
   where f.location is not null;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Grants: every RPC above is called from the browser (anon before onboarding,
+-- authenticated after). migrations/20260906_03_drop_demo.sql re-grants
+-- nearby_listings + farmer_map_points; the rest are granted here.
+-- ---------------------------------------------------------------------------
+grant execute on function nearby_listings(uuid, integer, text)      to anon, authenticated;
+grant execute on function nearby_ifs_matches(uuid, integer)         to anon, authenticated;
+grant execute on function supply_matches_for_demand(uuid, integer)  to anon, authenticated;
+grant execute on function demand_matches_for_listing(uuid, integer) to anon, authenticated;
+grant execute on function circular_badge(uuid)                      to anon, authenticated;
+grant execute on function payment_reliability(uuid)                 to anon, authenticated;
+grant execute on function farmer_map_points(uuid)                   to anon, authenticated;

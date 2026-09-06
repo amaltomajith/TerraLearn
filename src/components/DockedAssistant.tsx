@@ -12,7 +12,11 @@ interface CropContextData {
 
 const KEY = 'terralearn-assistant-open';
 
-/** Persistent, collapsible AskTerraLearn panel docked to the bottom-right of Home. */
+/**
+ * Persistent, collapsible AskTerraLearn panel. The pill stays anchored
+ * bottom-right; the expanded panel opens on the LEFT so it never covers the
+ * simulator results column on wide screens.
+ */
 export function DockedAssistant({
   position,
   cropContext,
@@ -40,20 +44,22 @@ export function DockedAssistant({
     });
 
   return (
-    <div className="fixed bottom-4 right-4 z-[900] flex flex-col items-end gap-2">
+    <>
       {open && (
-        <div className="w-[min(92vw,380px)] rounded-2xl overflow-hidden shadow-2xl border border-border/60 animate-in fade-in slide-in-from-bottom-4 duration-200">
+        <div
+          className="fixed z-[900] left-4 right-4 bottom-[4.75rem] sm:left-6 sm:right-auto sm:bottom-4 sm:w-[380px] max-w-[calc(100vw-2rem)] rounded-2xl overflow-hidden shadow-2xl border border-border/60 animate-in fade-in slide-in-from-bottom-4 duration-200"
+        >
           <AskTerraLearn position={position} cropContext={cropContext} />
         </div>
       )}
       <button
         type="button"
         onClick={toggle}
-        className="inline-flex items-center gap-2 h-12 px-4 rounded-full bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:bg-primary/90 hover:shadow-xl active:scale-[0.97] transition-all"
+        className="fixed bottom-4 right-4 z-[901] inline-flex items-center gap-2 h-12 px-4 rounded-full bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:bg-primary/90 hover:shadow-xl active:scale-[0.97] transition-all"
       >
         {open ? <X className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
         {open ? 'Hide assistant' : 'Ask TerraLearn'}
       </button>
-    </div>
+    </>
   );
 }

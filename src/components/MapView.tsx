@@ -43,41 +43,49 @@ const EMPTY_FC = { type: 'FeatureCollection', features: [] } as const;
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
 
-// Esri — free, key-less, CORS-enabled raster tiles (same provider for both layers).
+// Esri — free, key-less, CORS-enabled raster tiles.
 const ESRI_IMAGERY =
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const ESRI_REFERENCE =
   'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
 const ESRI_STREETS =
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
-const STREET_ATTRIBUTION = 'Esri, HERE, Garmin, © OpenStreetMap contributors';
 
-// Room for a Mapbox satellite basemap later: set VITE_MAPBOX_TOKEN and it takes over.
-const satelliteTiles = MAPBOX_TOKEN
-  ? [`https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}.jpg?access_token=${MAPBOX_TOKEN}`]
-  : [ESRI_IMAGERY];
+// Basemap providers. Set VITE_MAPBOX_TOKEN to route BOTH layers through Mapbox
+// (a real second provider); otherwise Esri (free, key-less) serves both.
+const mapboxRaster = (style: string) =>
+  `https://api.mapbox.com/styles/v1/mapbox/${style}/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`;
+
+const satelliteTiles = MAPBOX_TOKEN ? [mapboxRaster('satellite-streets-v12')] : [ESRI_IMAGERY];
 const satelliteAttribution = MAPBOX_TOKEN
-  ? '© Mapbox © Maxar'
+  ? '© Mapbox © Maxar © OpenStreetMap'
   : 'Imagery © Esri, Maxar, Earthstar Geographics';
 
+const streetTiles = MAPBOX_TOKEN ? [mapboxRaster('streets-v12')] : [ESRI_STREETS];
+const streetAttribution = MAPBOX_TOKEN
+  ? '© Mapbox © OpenStreetMap'
+  : 'Esri, HERE, Garmin, © OpenStreetMap contributors';
+
 function baseStyle(): StyleSpecification {
-  return {
-    version: 8,
-    sources: {
-      satellite: { type: 'raster', tiles: satelliteTiles, tileSize: 256, attribution: satelliteAttribution },
-      'satellite-ref': { type: 'raster', tiles: [ESRI_REFERENCE], tileSize: 256, attribution: '' },
-    },
-    layers: [
-      { id: 'bg', type: 'background', paint: { 'background-color': '#0b0f0c' } },
-      { id: 'satellite-layer', type: 'raster', source: 'satellite' },
-      {
-        id: 'satellite-ref-layer',
-        type: 'raster',
-        source: 'satellite-ref',
-        paint: { 'raster-opacity': 0.85 },
-      },
-    ],
+  const sources: StyleSpecification['sources'] = {
+    satellite: { type: 'raster', tiles: satelliteTiles, tileSize: 256, attribution: satelliteAttribution },
   };
+  const layers: NonNullable<StyleSpecification['layers']> = [
+    { id: 'bg', type: 'background', paint: { 'background-color': '#0b0f0c' } },
+    { id: 'satellite-layer', type: 'raster', source: 'satellite' },
+  ];
+  // Mapbox's satellite-streets style already carries place labels; the Esri
+  // reference overlay is only needed for the key-less Esri imagery.
+  if (!MAPBOX_TOKEN) {
+    sources['satellite-ref'] = { type: 'raster', tiles: [ESRI_REFERENCE], tileSize: 256, attribution: '' };
+    layers.push({
+      id: 'satellite-ref-layer',
+      type: 'raster',
+      source: 'satellite-ref',
+      paint: { 'raster-opacity': 0.85 },
+    });
+  }
+  return { version: 8, sources, layers };
 }
 
 function badgeDot(badge: string | null | undefined): string {
@@ -281,9 +289,9 @@ export function MapView({
       if (!map.getSource('street')) {
         map.addSource('street', {
           type: 'raster',
-          tiles: [ESRI_STREETS],
+          tiles: streetTiles,
           tileSize: 256,
-          attribution: STREET_ATTRIBUTION,
+          attribution: streetAttribution,
         });
       }
       map.addLayer({ id: 'street-layer', type: 'raster', source: 'street' }, 'satellite-layer');
