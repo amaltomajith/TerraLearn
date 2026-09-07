@@ -1,24 +1,19 @@
 """
-ssl_patch.py — must be imported BEFORE any huggingface_hub or sentence_transformers import.
+ssl_patch.py — imported first in app.main.
 
-Disables SSL certificate verification for outbound requests made by urllib3, requests,
-and httpx (used internally by huggingface_hub and sentence_transformers).
-This is required in environments where the system SSL certificate store
-is incomplete — common with Miniconda on Windows.
+Disables SSL certificate verification for outbound httpx requests (the agent's
+LLM calls, the tools' Open-Meteo calls, and the RAG calls to Supabase). Needed
+in environments with an incomplete system SSL certificate store — common with
+Miniconda on Windows, and harmless on Render (Supabase / Groq / Open-Meteo all
+present valid certs).
 """
-import os
 import ssl
 import httpx
 
-os.environ["CURL_CA_BUNDLE"] = ""
-os.environ["REQUESTS_CA_BUNDLE"] = ""
-os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-
-# Disable SSL verification globally in stdlib ssl
+# Disable SSL verification globally in stdlib ssl.
 ssl._create_default_https_context = ssl._create_unverified_context
 
-# Patch httpx.Client.__init__ so any client (including HuggingFace Hub's client) defaults to verify=False
+# Patch httpx.Client so every client defaults to verify=False.
 _original_httpx_client_init = httpx.Client.__init__
 
 

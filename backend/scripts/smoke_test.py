@@ -17,6 +17,14 @@ import sys
 import urllib.request
 import urllib.error
 
+# Answers contain characters like U+202F (narrow no-break space, e.g. "5 µg/m³")
+# that the default Windows console codepage can't encode — don't let a print crash a test.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 BASE_URL = "http://127.0.0.1:8000"
 LAT, LNG = 28.6139, 77.2090  # New Delhi
 

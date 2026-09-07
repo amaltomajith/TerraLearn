@@ -255,3 +255,14 @@ create policy am_rw on assistant_messages
     select 1 from assistant_threads t
     where t.id = assistant_messages.thread_id and t.farmer_id = current_farmer_id()
   ));
+
+-- ===========================================================================
+-- knowledge_chunks  (AI assistant RAG reference data)
+--   Added in migrations/20260908_01_knowledge_rag.sql. World-readable public
+--   reference text; no write policy (seed script uses a temporary one).
+-- ===========================================================================
+alter table knowledge_chunks enable row level security;
+
+drop policy if exists knowledge_chunks_read on knowledge_chunks;
+create policy knowledge_chunks_read on knowledge_chunks
+  for select using (true);
