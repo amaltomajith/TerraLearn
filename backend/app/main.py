@@ -1,7 +1,6 @@
-import app.ssl_patch  # noqa: F401 — must be first; patches SSL before HuggingFace imports
+import app.ssl_patch  # noqa: F401 — must be first; patches SSL before other imports
 import asyncio
 import logging
-from contextlib import asynccontextmanager
 from typing import Optional, List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,25 +10,16 @@ from app.agent import run_agent, build_system_prompt, extract_action
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Build the RAG index on first startup if storage doesn't exist yet.
-    Runs in a thread so the synchronous HF model download doesn't block the event loop."""
-    try:
-        from app.rag import ensure_index_built
-        await asyncio.to_thread(ensure_index_built)
-    except Exception as e:
-        logger.warning(
-            "RAG index build failed at startup (will retry on first request): %s", e
-        )
-    yield  # server runs here
+try:
+    from app.rag import is_configured as _rag_configured
+    logger.info("RAG knowledge base: %s", "pgvector ready" if _rag_configured() else "NOT configured (set SUPABASE_URL / SUPABASE_ANON_KEY)")
+except Exception as e:  # pragma: no cover
+    logger.warning("RAG module import failed: %s", e)
 
 
 app = FastAPI(
     title="TerraLearn Environmental Agent API",
     version="1.0.0",
-    lifespan=lifespan,
 )
 
 app.add_middleware(

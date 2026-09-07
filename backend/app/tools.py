@@ -1,7 +1,6 @@
 import json
 import datetime
 import logging
-from pathlib import Path
 import httpx
 from langchain_core.tools import tool
 
@@ -101,21 +100,13 @@ def get_environmental_knowledge(query: str) -> str:
         query: Specific search terms or question topic.
     """
     try:
-        from app.rag import get_retriever
+        from app.rag import retrieve
 
-        retriever = get_retriever()
-        nodes = retriever.retrieve(query)
-
-        if not nodes:
+        rows = retrieve(query, k=3)
+        if not rows:
             return "No relevant knowledge found in reference documents."
 
-        parts = []
-        for node in nodes:
-            raw_path = node.metadata.get("file_name", "") or node.metadata.get("filename", "unknown")
-            source_name = Path(raw_path).name
-            content = node.get_content().strip()
-            parts.append(f"[Source: {source_name}]\n{content}")
-
+        parts = [f"[Source: {r['source_file']}]\n{r['content'].strip()}" for r in rows]
         return "\n\n---\n\n".join(parts)
 
     except Exception as e:

@@ -213,3 +213,37 @@ create table if not exists assistant_messages (
 );
 create index if not exists assistant_messages_thread_idx
   on assistant_messages (thread_id, created_at);
+
+-- ---------------------------------------------------------------------------
+-- knowledge_chunks  (AI assistant RAG — pgvector)
+--   Added in migrations/20260908_01_knowledge_rag.sql. 384-dim embeddings from
+--   Supabase's gte-small model (the `embed` edge function). Seed with
+--   backend/scripts/seed_knowledge.py.
+-- ---------------------------------------------------------------------------
+create extension if not exists vector;
+
+create table if not exists knowledge_chunks (
+  id          bigint generated always as identity primary key,
+  source_file text not null,
+  content     text not null,
+  embedding   vector(384) not null,
+  created_at  timestamptz not null default now()
+);
+create index if not exists knowledge_chunks_embedding_idx
+  on knowledge_chunks using hnsw (embedding vector_cosine_ops);
+
+-- match_knowledge(): top-k cosine-nearest chunks. See 40_functions.sql mirror below is n/a;
+-- kept here next to the table for locality.
+create or replace function match_knowledge(
+  query_embedding vector(384),
+  match_count int default 3
+)
+returns table (source_file text, content text, similarity float)
+language sql stable set search_path = public
+as $$
+  select kc.source_file, kc.content, 1 - (kc.embedding <=> query_embedding) as similarity
+  from knowledge_chunks kc
+  order by kc.embedding <=> query_embedding
+  limit greatest(match_count, 1);
+$$;
+grant execute on function match_knowledge(vector, int) to anon, authenticated;

@@ -5,7 +5,7 @@ services:
     region: singapore
     plan: free
     rootDir: backend
-    buildCommand: pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && pip install --no-cache-dir -r requirements.txt
+    buildCommand: pip install --no-cache-dir -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
@@ -22,3 +22,9 @@ services:
         value: https://openrouter.ai/api/v1
       - key: FALLBACK_MODEL
         value: meta-llama/llama-3.3-70b-instruct
+      # RAG knowledge base — Supabase pgvector + the `embed` edge function.
+      # Both values are public/safe (the anon key is already shipped in the frontend bundle).
+      - key: SUPABASE_URL
+        value: https://qrkjbdvbehvklaqgotrv.supabase.co
+      - key: SUPABASE_ANON_KEY
+        sync: false
