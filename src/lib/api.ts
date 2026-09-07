@@ -42,6 +42,11 @@ export interface SoilData {
   nitrogen: number; // ppm
   phosphorus: number; // ppm
   potassium: number; // ppm
+  // Where the values came from:
+  //   'isric'     — a real ISRIC SoilGrids measurement for this point
+  //   'estimated' — SoilGrids was unavailable; a deterministic latitude-band
+  //                 heuristic seeded on the coordinate (same pin → same values)
+  source: 'isric' | 'estimated';
 }
 
 export interface LocationInfo {
@@ -720,6 +725,25 @@ export async function fetchMandiPrices(
   }
 }
 
+// Deterministic hash-seeded PRNG. The same rounded coordinate always produces
+// the same stream, so the estimated-soil fallback below is stable per pin
+// rather than reshuffling on every call.
+function seededRandom(lat: number, lng: number): () => number {
+  const str = `${Math.round(lat * 1000)},${Math.round(lng * 1000)}`;
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return () => {
+    h += 0x6d2b79f5;
+    let t = h;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // Fetch real soil data from ISRIC SoilGrids API (free, no API key required)
 export async function fetchSoilData(lat: number, lng: number): Promise<SoilData> {
   const key = coordKey(lat, lng);
@@ -754,15 +778,18 @@ export async function fetchSoilData(lat: number, lng: number): Promise<SoilData>
 
       const potassium = Math.round(100 + (nitrogen * 1.5) + (phosphorus * 2));
 
-      const result = { pH, nitrogen, phosphorus, potassium };
+      const result: SoilData = { pH, nitrogen, phosphorus, potassium, source: 'isric' };
       soilCache.set(key, result);
       return result;
     }
 
     throw new Error('SoilGrids unavailable');
   } catch (error) {
-    console.warn('SoilGrids API fallback, using heuristic soil data:', error);
+    console.warn('SoilGrids API fallback, using deterministic heuristic soil data:', error);
     const absLat = Math.abs(lat);
+    // Deterministic, coordinate-seeded — the same pin always resolves to the
+    // same estimated profile (no Math.random reshuffle between calls).
+    const rand = seededRandom(lat, lng);
 
     let pH: number;
     let nitrogen: number;
@@ -770,32 +797,33 @@ export async function fetchSoilData(lat: number, lng: number): Promise<SoilData>
     let potassium: number;
 
     if (absLat < 10) {
-      pH = 5.2 + Math.random() * 0.8;
-      nitrogen = 45 + Math.random() * 30;
-      phosphorus = 10 + Math.random() * 15;
-      potassium = 80 + Math.random() * 60;
+      pH = 5.2 + rand() * 0.8;
+      nitrogen = 45 + rand() * 30;
+      phosphorus = 10 + rand() * 15;
+      potassium = 80 + rand() * 60;
     } else if (absLat < 30) {
-      pH = 5.8 + Math.random() * 1.0;
-      nitrogen = 35 + Math.random() * 25;
-      phosphorus = 15 + Math.random() * 20;
-      potassium = 120 + Math.random() * 80;
+      pH = 5.8 + rand() * 1.0;
+      nitrogen = 35 + rand() * 25;
+      phosphorus = 15 + rand() * 20;
+      potassium = 120 + rand() * 80;
     } else if (absLat < 50) {
-      pH = 6.2 + Math.random() * 1.2;
-      nitrogen = 50 + Math.random() * 40;
-      phosphorus = 25 + Math.random() * 25;
-      potassium = 150 + Math.random() * 100;
+      pH = 6.2 + rand() * 1.2;
+      nitrogen = 50 + rand() * 40;
+      phosphorus = 25 + rand() * 25;
+      potassium = 150 + rand() * 100;
     } else {
-      pH = 4.8 + Math.random() * 1.5;
-      nitrogen = 20 + Math.random() * 20;
-      phosphorus = 8 + Math.random() * 12;
-      potassium = 60 + Math.random() * 50;
+      pH = 4.8 + rand() * 1.5;
+      nitrogen = 20 + rand() * 20;
+      phosphorus = 8 + rand() * 12;
+      potassium = 60 + rand() * 50;
     }
 
-    const fallback = {
+    const fallback: SoilData = {
       pH: Math.round(pH * 10) / 10,
       nitrogen: Math.round(nitrogen),
       phosphorus: Math.round(phosphorus),
       potassium: Math.round(potassium),
+      source: 'estimated',
     };
     soilCache.set(key, fallback);
     return fallback;

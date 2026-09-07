@@ -102,6 +102,13 @@ class RiskBriefResponse(BaseModel):
 def read_root():
     return {"status": "online", "service": "TerraLearn FastAPI Backend"}
 
+@app.get("/health")
+def health_check():
+    """Lightweight liveness probe — no LLM, RAG, or network calls.
+    Used by the keep-Render-awake GitHub Action to stop the free-tier
+    service from sleeping."""
+    return {"status": "ok"}
+
 @app.post("/api/ask", response_model=AskResponse)
 async def ask_question(req: AskRequest):
     try:
