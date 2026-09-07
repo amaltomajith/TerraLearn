@@ -47,6 +47,17 @@ export async function getFarmer(id: string): Promise<Farmer | null> {
   return data as Farmer | null;
 }
 
+export type FarmerBrief = Pick<Farmer, 'id' | 'name' | 'village' | 'enterprises' | 'role'>;
+
+/** Minimal public profile fields for a set of farmer ids (assistant Saath snapshot). */
+export async function getFarmersByIds(ids: string[]): Promise<FarmerBrief[]> {
+  if (ids.length === 0) return [];
+  const sb = requireSupabase();
+  return unwrap(
+    await sb.from('farmers').select('id,name,village,enterprises,role').in('id', ids),
+  );
+}
+
 // --- onboarding + farms ------------------------------------------------
 
 export interface NewProfileWithFarm {

@@ -1,4 +1,6 @@
 import os
+import re
+import json
 import time
 import logging
 from typing import Optional
@@ -72,12 +74,58 @@ def build_system_prompt(language=None, name=None, village=None, enterprises=None
         "- Call get_environmental_knowledge for questions about safe limits, pollution effects on "
         "crops, government schemes, or health thresholds. Name the source in plain words "
         "(e.g. 'the WHO guide says') — a formal citation is optional.\n"
-        "- If a crop-simulation result is in the prompt, use its numbers."
+        "- If a crop-simulation result is in the prompt, use its numbers.\n\n"
+        "MESSAGING OTHER FARMERS:\n"
+        "- If the farmer asks you to message / tell / reply to / ask someone who appears in the "
+        "Saath block, DO NOT say you sent it. Write ONE short sentence like 'I've drafted a "
+        "message to <name> - check it below and tap Send', then on a new line append EXACTLY:\n"
+        "```terralearn-action\n"
+        '{"type":"send_message","recipientName":"<their exact name from the Saath block>","body":"<the message, in the farmer\'s language>"}\n'
+        "```\n"
+        "- Use only a name that appears in the Saath block. If you cannot tell who they mean, "
+        "ask them - do not append a block. Never append a block unless they clearly asked to "
+        "send a message.\n\n"
+        "YOUR SAATH NETWORK:\n"
+        "- If a '== Your Saath network right now ==' block is in the prompt, it lists the "
+        "farmer's real inbox, nearby farmers, circular-farming (IFS) loops, their own listings, "
+        "and nearby buyers. Use it to answer things like 'what's in my inbox?', 'who near me "
+        "needs cow dung?', or 'who messaged me about the tractor?'.\n"
+        "- Refer to people by name. Use only what is in that block; if it is absent or a "
+        "section is empty, say you can't see that Saath info right now.\n"
+        "- 'looks unread' is a guess — phrase it as 'looks unread', not a certainty."
     )
 
 
 # Module default (used by /api/risk-brief and as the fallback).
 SYSTEM_PROMPT = build_system_prompt()
+
+
+_ACTION_RE = re.compile(r"```terralearn-action\s*(\{.*?\})\s*```", re.DOTALL)
+
+
+def extract_action(text: str):
+    """Pull a trailing ```terralearn-action``` JSON block out of the answer.
+
+    Returns (cleaned_text, action_dict | None). Fails soft: any parse/shape
+    problem returns the block stripped and action=None.
+    """
+    if not text:
+        return text, None
+    m = _ACTION_RE.search(text)
+    if not m:
+        return text, None
+    cleaned = (text[: m.start()] + text[m.end():]).strip()
+    try:
+        data = json.loads(m.group(1))
+    except Exception:
+        return cleaned, None
+    if not isinstance(data, dict) or data.get("type") != "send_message":
+        return cleaned, None
+    name = str(data.get("recipientName") or "").strip()
+    body = str(data.get("body") or "").strip()
+    if not name or not body:
+        return cleaned, None
+    return cleaned, {"type": "send_message", "recipientName": name, "body": body}
 
 
 def log_provider_config():

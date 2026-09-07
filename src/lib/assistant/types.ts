@@ -57,12 +57,53 @@ export interface AssistantPageContext {
 
 export interface AssistantAction {
   type: 'send_message';
-  recipientFarmerId: string;
+  /** The model proposes a name; the frontend resolves it against the Saath snapshot. */
   recipientName: string;
-  threadId?: string | null;
   body: string;
-  contextType?: string | null;
-  contextId?: string | null;
+  /** Filled in by the client resolver at confirm time. */
+  recipientFarmerId?: string;
+  threadId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Saath snapshot (PR2) — a compact, frontend-assembled view of the farmer's
+// Saath network, sent as structured context on every /api/ask call. All lists
+// are hard-capped client-side to stay inside the token budget.
+// ---------------------------------------------------------------------------
+
+export interface SaathSnapshot {
+  inbox: {
+    threadId: string;
+    otherId: string;
+    otherName: string;
+    lastSnippet: string;
+    fromMe: boolean;
+    unreadish: boolean;
+    at: string; // YYYY-MM-DD
+  }[];
+  nearbyFarmers: {
+    id: string;
+    name: string;
+    village?: string;
+    enterprises: string[];
+    distanceKm?: number;
+  }[];
+  ifsLoops: {
+    resource: string;
+    direction: 'i_supply' | 'i_need';
+    theirId: string;
+    theirName: string;
+    distanceKm?: number;
+  }[];
+  myListings: { id: string; type: string; title: string; active: boolean }[];
+  nearbyDemand: {
+    buyerId: string;
+    buyerName: string;
+    category: string;
+    rate?: number;
+    unit?: string;
+    distanceKm?: number;
+  }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -81,10 +122,12 @@ export interface AssistantThread {
 export interface AssistantMeta {
   /** Which provider served the answer: 'groq' | 'openrouter_fallback'. */
   provider?: string;
-  /** PR3: a pending / completed message-send proposal. */
+  /** A pending / completed message-send proposal. */
   action?: AssistantAction;
-  /** PR3: ISO timestamp set once the user confirms the send. */
+  /** ISO timestamp set once the user confirms the send. */
   actionSentAt?: string;
+  /** Set if the user dismissed the proposal without sending. */
+  actionDismissed?: boolean;
 }
 
 export interface AssistantMessage {
@@ -116,6 +159,7 @@ export interface AskPayload {
   suggestedCrops?: string[];
   mandiTrendPct?: number;
   buyerDemand?: AssistantExtraContext['buyerDemand'];
+  saath?: SaathSnapshot;
 }
 
 export interface AskResult {
