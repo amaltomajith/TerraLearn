@@ -8,6 +8,23 @@ function baseUrl(): string {
   return (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://127.0.0.1:8000';
 }
 
+/**
+ * Safety net: the backend strips the send_message block, but if a model variant
+ * emits it in a shape the parser misses, never show raw JSON in the bubble.
+ */
+export function stripActionArtifacts(text: string): string {
+  return text
+    // fenced block, any / no language tag
+    .replace(
+      /```[a-zA-Z0-9_-]*\s*\{[^]*?"type"\s*:\s*"send_message"[^]*?\}\s*```/gi,
+      '',
+    )
+    // bare (flat) json object mentioning send_message
+    .replace(/\{[^{}]*"type"\s*:\s*"send_message"[^{}]*\}/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export async function askAssistant(
   payload: AskPayload,
   signal?: AbortSignal,
@@ -46,8 +63,9 @@ export async function askAssistant(
     data.action && data.action.type === 'send_message' && data.action.recipientName && data.action.body
       ? data.action
       : undefined;
-  return {
-    answer: data.answer || 'No response generated.',
-    action,
-  };
+  let answer = stripActionArtifacts(data.answer || 'No response generated.');
+  if (!answer && action) {
+    answer = `I've drafted a message to ${action.recipientName} — check it below and tap Send.`;
+  }
+  return { answer: answer || 'No response generated.', action };
 }
