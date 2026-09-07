@@ -171,6 +171,19 @@ export interface DemandMatchRow {
   distance_m: number | null;
 }
 
+// nearby_demand_listings() — priced buyer demand near a point, by produce category.
+export interface NearbyDemandRow {
+  demand_id: string;
+  buyer_id: string;
+  buyer_name: string;
+  category: string | null;
+  title: string;
+  quantity: number | null;
+  unit: string | null;
+  rate: number | null;
+  distance_m: number | null;
+}
+
 export interface MapPointRow {
   id: string;
   name: string;

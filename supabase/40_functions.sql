@@ -230,6 +230,51 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- nearby_demand_listings: active buyer demand (with a real price) near a point,
+-- keyed by produce category. Used by the crop-yield simulator, which has only a
+-- crop name + lat/lng (not a listing id). See migrations/20260907_02.
+-- ---------------------------------------------------------------------------
+create or replace function nearby_demand_listings(
+  p_lat      double precision,
+  p_lng      double precision,
+  p_category text,
+  p_radius_m integer default 100000
+)
+returns table (
+  demand_id   uuid,
+  buyer_id    uuid,
+  buyer_name  text,
+  category    text,
+  title       text,
+  quantity    numeric,
+  unit        text,
+  rate        numeric,
+  distance_m  double precision
+)
+language sql
+stable
+set search_path = public
+as $$
+  with pt as (
+    select st_setsrid(st_makepoint(p_lng, p_lat), 4326)::geography as g
+  )
+  select
+    d.id, d.farmer_id, f.name, d.category, d.title, d.quantity, d.unit, d.rate,
+    st_distance(d.location, pt.g) as distance_m
+  from listings d
+  join farmers f on f.id = d.farmer_id
+  cross join pt
+  where d.type = 'demand'
+    and d.is_active
+    and d.rate is not null
+    and d.rate > 0
+    and lower(coalesce(d.category, '')) = lower(coalesce(p_category, ''))
+    and d.location is not null
+    and st_dwithin(d.location, pt.g, p_radius_m)
+  order by st_distance(d.location, pt.g) asc;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- circular_badge: tier from completed IFS exchanges.
 -- ---------------------------------------------------------------------------
 create or replace function circular_badge(p_farmer_id uuid)
@@ -304,3 +349,17 @@ as $$
   from farmers f
   where f.location is not null;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Grants: every RPC above is called from the browser (anon before onboarding,
+-- authenticated after). migrations/20260906_03_drop_demo.sql re-grants
+-- nearby_listings + farmer_map_points; the rest are granted here.
+-- ---------------------------------------------------------------------------
+grant execute on function nearby_listings(uuid, integer, text)      to anon, authenticated;
+grant execute on function nearby_ifs_matches(uuid, integer)         to anon, authenticated;
+grant execute on function supply_matches_for_demand(uuid, integer)  to anon, authenticated;
+grant execute on function demand_matches_for_listing(uuid, integer) to anon, authenticated;
+grant execute on function nearby_demand_listings(double precision, double precision, text, integer) to anon, authenticated;
+grant execute on function circular_badge(uuid)                      to anon, authenticated;
+grant execute on function payment_reliability(uuid)                 to anon, authenticated;
+grant execute on function farmer_map_points(uuid)                   to anon, authenticated;

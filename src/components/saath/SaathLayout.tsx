@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils';
 
 const TABS = [
   { to: 'feed', label: 'Feed' },
-  { to: 'map', label: 'Map' },
   { to: 'listings', label: 'My listings' },
   { to: 'messages', label: 'Messages' },
   { to: 'buyer', label: 'Buyer desk' },
@@ -19,7 +18,7 @@ export function SaathLayout() {
       <Navigation authSlot={<NavAuthControl />} />
 
       <div className="fixed top-16 left-0 right-0 z-40 bg-background/90 backdrop-blur-xl border-b border-border/50">
-        <div className="max-w-[1600px] mx-auto px-6 flex items-center justify-between gap-4 h-12">
+        <div className="max-w-[1800px] mx-auto px-6 flex items-center justify-between gap-4 h-12">
           <nav className="flex items-center gap-1 overflow-x-auto scrollbar-thin -mx-2 px-2">
             {TABS.map((t) => (
               <NavLink
@@ -41,7 +40,7 @@ export function SaathLayout() {
         </div>
       </div>
 
-      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 pb-20 pt-32">
+      <main className="max-w-[1800px] mx-auto px-4 sm:px-6 pb-20 pt-32">
         <Outlet />
       </main>
     </div>

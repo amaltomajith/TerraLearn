@@ -1,6 +1,8 @@
 // Display-only mirror of the `ifs_matrix` table (the DB copy is authoritative
 // for matching). Used for labels, icons and "how the loop closes" hints in the UI.
 
+import type { IfsMatchRow } from './types';
+
 export interface EnterpriseInfo {
   key: string;
   label: string;
@@ -100,4 +102,64 @@ export function enterpriseEmoji(key: string): string {
 export function describeEnterprises(keys: string[] | null | undefined): string {
   if (!keys || keys.length === 0) return 'No enterprises listed';
   return keys.map(enterpriseLabel).join(' · ');
+}
+
+// --- bidirectional IFS-match merge --------------------------------------------
+// `nearby_ifs_matches` emits one row per (nearby farmer, resource, direction).
+// A farmer you both supply AND buy from therefore shows up as several rows.
+// mergeIfsMatches() collapses those into one entry per farmer, keeping the two
+// directions separate so the UI can render a single "you send / you receive" card.
+
+export interface MergedIfsLoopLeg {
+  resource: string;
+  my_enterprise: string;
+  their_enterprise: string;
+}
+
+export interface MergedIfsLoop {
+  their_farmer_id: string;
+  their_farmer_name: string;
+  their_village: string | null;
+  distance_m: number | null;
+  has_active_listing: boolean;
+  supply: MergedIfsLoopLeg[]; // resources you send them
+  need: MergedIfsLoopLeg[]; // resources you receive from them
+}
+
+export function mergeIfsMatches(rows: IfsMatchRow[]): MergedIfsLoop[] {
+  const byFarmer = new Map<string, MergedIfsLoop>();
+  const order: string[] = [];
+
+  for (const r of rows) {
+    let loop = byFarmer.get(r.their_farmer_id);
+    if (!loop) {
+      loop = {
+        their_farmer_id: r.their_farmer_id,
+        their_farmer_name: r.their_farmer_name,
+        their_village: r.their_village,
+        distance_m: r.distance_m,
+        has_active_listing: r.has_active_listing,
+        supply: [],
+        need: [],
+      };
+      byFarmer.set(r.their_farmer_id, loop);
+      order.push(r.their_farmer_id);
+    }
+
+    if (r.distance_m != null) {
+      loop.distance_m = loop.distance_m == null ? r.distance_m : Math.min(loop.distance_m, r.distance_m);
+    }
+    loop.has_active_listing = loop.has_active_listing || r.has_active_listing;
+
+    const leg = loop[r.direction === 'i_supply' ? 'supply' : 'need'];
+    if (!leg.some((l) => l.resource === r.resource)) {
+      leg.push({
+        resource: r.resource,
+        my_enterprise: r.my_enterprise,
+        their_enterprise: r.their_enterprise,
+      });
+    }
+  }
+
+  return order.map((id) => byFarmer.get(id)!);
 }

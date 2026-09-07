@@ -7,6 +7,8 @@ export default defineConfig({
   base: process.env.NODE_ENV === "development" ? "/" : process.env.VITE_BASE_PATH || "/",
   optimizeDeps: {
     entries: ["src/main.tsx", "src/tempobook/**/*"],
+    // Pre-bundle maplibre-gl so its web worker initialises correctly in dev.
+    include: ["maplibre-gl"],
   },
   plugins: [
     react(),
@@ -15,6 +17,16 @@ export default defineConfig({
     preserveSymlinks: true,
     alias: {
       "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          maplibre: ["maplibre-gl"],
+          recharts: ["recharts"],
+        },
+      },
     },
   },
   server: {

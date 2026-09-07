@@ -13,9 +13,38 @@ export interface CropContextData {
   profit: number;
 }
 
+/** Always-present, refreshed context injected into every chat call alongside the
+ *  static crop result — the current pin's environment, the ranked suggestions,
+ *  and nearby buyer demand. */
+export interface AssistantExtraContext {
+  locationName?: string;
+  env?: {
+    temperature?: number;
+    precipitation?: number;
+    humidity?: number;
+    soilPH?: number;
+    soilNitrogen?: number;
+    soilPhosphorus?: number;
+    usAqi?: number;
+    pm2_5?: number;
+    pm10?: number;
+    ozone?: number;
+  };
+  suggestedCrops?: string[];
+  mandiTrendPct?: number;
+  buyerDemand?: {
+    buyerName: string;
+    category: string;
+    rate?: number;
+    unit?: string;
+    distanceKm?: number;
+  }[];
+}
+
 export interface AskTerraLearnProps {
   position: { lat: number; lng: number } | null;
   cropContext?: CropContextData | null;
+  context?: AssistantExtraContext | null;
 }
 
 interface Message {
@@ -25,7 +54,7 @@ interface Message {
   timestamp: string;
 }
 
-export function AskTerraLearn({ position, cropContext }: AskTerraLearnProps) {
+export function AskTerraLearn({ position, cropContext, context }: AskTerraLearnProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -67,18 +96,21 @@ export function AskTerraLearn({ position, cropContext }: AskTerraLearnProps) {
 
     const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
+    const requestBody = JSON.stringify({
+      question: textToSend,
+      lat: position.lat,
+      lng: position.lng,
+      cropContext: cropContext || undefined,
+      ...(context ?? {}),
+    });
+
     try {
       let response: Response | null = null;
       try {
         response = await fetch(`${baseUrl}/api/ask`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: textToSend,
-            lat: position.lat,
-            lng: position.lng,
-            cropContext: cropContext || undefined,
-          }),
+          body: requestBody,
         });
       } catch {
         // Fallback between localhost and 127.0.0.1 if default fails
@@ -88,12 +120,7 @@ export function AskTerraLearn({ position, cropContext }: AskTerraLearnProps) {
         response = await fetch(`${fallbackUrl}/api/ask`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: textToSend,
-            lat: position.lat,
-            lng: position.lng,
-            cropContext: cropContext || undefined,
-          }),
+          body: requestBody,
         });
       }
 

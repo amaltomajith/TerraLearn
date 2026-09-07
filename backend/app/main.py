@@ -2,7 +2,7 @@ import app.ssl_patch  # noqa: F401 — must be first; patches SSL before Hugging
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -53,11 +53,35 @@ class CropContext(BaseModel):
     viabilityScore: float
     profit: float
 
+class EnvSnapshot(BaseModel):
+    temperature: Optional[float] = None
+    precipitation: Optional[float] = None
+    humidity: Optional[float] = None
+    soilPH: Optional[float] = None
+    soilNitrogen: Optional[float] = None
+    soilPhosphorus: Optional[float] = None
+    usAqi: Optional[float] = None
+    pm2_5: Optional[float] = None
+    pm10: Optional[float] = None
+    ozone: Optional[float] = None
+
+class BuyerDemandCtx(BaseModel):
+    buyerName: str
+    category: str
+    rate: Optional[float] = None
+    unit: Optional[str] = None
+    distanceKm: Optional[float] = None
+
 class AskRequest(BaseModel):
     question: str
     lat: float
     lng: float
     cropContext: Optional[CropContext] = None
+    locationName: Optional[str] = None
+    env: Optional[EnvSnapshot] = None
+    suggestedCrops: Optional[List[str]] = None
+    mandiTrendPct: Optional[float] = None
+    buyerDemand: Optional[List[BuyerDemandCtx]] = None
 
 class AskResponse(BaseModel):
     answer: str
@@ -94,6 +118,57 @@ async def ask_question(req: AskRequest):
                 f"- Viability Score: {req.cropContext.viabilityScore}/100\n"
                 f"- Calculated Profit: ${req.cropContext.profit:,.2f}"
             )
+
+        if req.locationName:
+            formatted_input += f"\nLocation: {req.locationName}"
+
+        if req.env:
+            e = req.env
+            snap = []
+            if e.temperature is not None:
+                snap.append(f"temp {e.temperature}C")
+            if e.humidity is not None:
+                snap.append(f"humidity {e.humidity}%")
+            if e.precipitation is not None:
+                snap.append(f"precip {e.precipitation}mm")
+            if e.soilPH is not None:
+                snap.append(f"soil pH {e.soilPH}")
+            if e.soilNitrogen is not None:
+                snap.append(f"soil N {e.soilNitrogen}ppm")
+            if e.soilPhosphorus is not None:
+                snap.append(f"soil P {e.soilPhosphorus}ppm")
+            if e.usAqi is not None:
+                snap.append(f"US AQI {e.usAqi}")
+            if e.pm2_5 is not None:
+                snap.append(f"PM2.5 {e.pm2_5}")
+            if e.pm10 is not None:
+                snap.append(f"PM10 {e.pm10}")
+            if e.ozone is not None:
+                snap.append(f"ozone {e.ozone}")
+            if snap:
+                formatted_input += "\nCurrent pin snapshot: " + ", ".join(snap)
+
+        if req.suggestedCrops:
+            formatted_input += (
+                "\nTop suggested crops for this pin: " + ", ".join(req.suggestedCrops)
+            )
+
+        if req.mandiTrendPct is not None:
+            formatted_input += (
+                f"\nRecent mandi price trend for the selected crop: "
+                f"{req.mandiTrendPct:+.0f}% vs the trailing average"
+            )
+
+        if req.buyerDemand:
+            lines = []
+            for b in req.buyerDemand:
+                line = f"- {b.buyerName} wants {b.category}"
+                if b.rate:
+                    line += f" @ {b.rate}/{b.unit or 'unit'}"
+                if b.distanceKm is not None:
+                    line += f" ({b.distanceKm} km away)"
+                lines.append(line)
+            formatted_input += "\nNearby buyer demand:\n" + "\n".join(lines)
 
         answer_text = run_agent(formatted_input)
         if not answer_text:

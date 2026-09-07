@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, DollarSign, Wheat, Calendar, Clock, ArrowDownRight, ArrowUpRight, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Wheat, Calendar, Clock, ArrowDownRight, ArrowUpRight, ShieldCheck, ShieldAlert, ShieldX, Store, LineChart, Info } from 'lucide-react';
 import { format } from 'date-fns';
 import { getWarningIcon } from './CustomIcons';
 
@@ -18,6 +18,10 @@ interface FinancialResultsProps {
   areaHectares?: number;
   warnings?: string[];
   viabilityScore?: number;
+  priceSource?: 'buyer' | 'agmarknet' | 'reference';
+  buyerName?: string;
+  buyerDistanceKm?: number;
+  mandiTrendPct?: number;
 }
 
 export function FinancialResults({
@@ -34,6 +38,10 @@ export function FinancialResults({
   areaHectares = 1,
   warnings = [],
   viabilityScore = 100,
+  priceSource = 'reference',
+  buyerName,
+  buyerDistanceKm,
+  mandiTrendPct,
 }: FinancialResultsProps) {
   const [animatedProfit, setAnimatedProfit] = useState(0);
   const [animatedRevenue, setAnimatedRevenue] = useState(0);
@@ -274,6 +282,42 @@ export function FinancialResults({
               {formatCurrency(pricePerUnit)}
               <span className="text-sm ml-1 text-muted-foreground font-sans">/ton</span>
             </p>
+            {priceSource === 'buyer' && buyerName && (
+              <p className="text-[11px] font-medium text-accent flex items-center gap-1">
+                <Store className="w-3 h-3 shrink-0" />
+                buyer demand · {buyerName}
+                {buyerDistanceKm != null ? ` · ${buyerDistanceKm} km away` : ''}
+              </p>
+            )}
+            {priceSource === 'agmarknet' && (
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <LineChart className="w-3 h-3 shrink-0" />
+                mandi price · Agmarknet
+                {mandiTrendPct != null && mandiTrendPct !== 0 && (
+                  <span
+                    className={`inline-flex items-center gap-0.5 ${
+                      mandiTrendPct > 0
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-destructive'
+                    }`}
+                  >
+                    {mandiTrendPct > 0 ? (
+                      <TrendingUp className="w-3 h-3" />
+                    ) : (
+                      <TrendingDown className="w-3 h-3" />
+                    )}
+                    {mandiTrendPct > 0 ? '+' : ''}
+                    {mandiTrendPct}%
+                  </span>
+                )}
+              </p>
+            )}
+            {priceSource === 'reference' && (
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Info className="w-3 h-3 shrink-0" />
+                reference price · no live market data for this crop or location
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">

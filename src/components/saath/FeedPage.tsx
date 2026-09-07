@@ -45,7 +45,7 @@ export function FeedPage() {
             </Link>
           }
         >
-          <div className="flex flex-wrap gap-1.5 mb-4">
+          <div className="flex flex-wrap gap-1.5 mb-3">
             {FILTERS.map((f) => (
               <button
                 key={f.value}
@@ -64,9 +64,9 @@ export function FeedPage() {
 
           {error && <p className="text-sm text-destructive">{error}</p>}
           {loading && !data && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-24 rounded-xl bg-muted/40 animate-pulse" />
+                <div key={i} className="h-20 rounded-xl bg-muted/40 animate-pulse" />
               ))}
             </div>
           )}
@@ -74,7 +74,7 @@ export function FeedPage() {
             <EmptyState>No listings within 20 km for this filter.</EmptyState>
           )}
           {data && data.length > 0 && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {data.map((row) => (
                 <ListingCard key={row.id} row={row} />
               ))}

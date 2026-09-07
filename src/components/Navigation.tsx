@@ -18,7 +18,7 @@ export function Navigation({ authSlot }: { authSlot?: ReactNode }) {
 
   return (
     <nav className="fixed top-0 left-0 right-0 h-16 bg-background/80 backdrop-blur-xl border-b border-border/50 z-50 animate-in fade-in slide-in-from-top-4 duration-500">
-      <div className="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between">
+      <div className="max-w-[1800px] mx-auto px-6 h-full flex items-center justify-between">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-sm">
@@ -32,7 +32,7 @@ export function Navigation({ authSlot }: { authSlot?: ReactNode }) {
 
           <div className="hidden sm:flex items-center gap-4 pl-2">
             <NavLink to="/" end className={linkClass}>
-              Simulator
+              Home
             </NavLink>
             <NavLink to="/saath" className={linkClass}>
               Saath

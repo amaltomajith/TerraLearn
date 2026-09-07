@@ -54,7 +54,12 @@ from (values
   ('33333333-3333-3333-3333-000000000011', '11111111-1111-1111-1111-000000000009', 'equipment', 'tractor',                  'Tractor + rotavator for hire - Rs 900/hr',  'Mahindra 575, rotavator and cultivator. Available outside my own season.',  1,   'hr',       900,  null),
   ('33333333-3333-3333-3333-000000000012', '11111111-1111-1111-1111-000000000010', 'resource',  'silk cocoons',             'Bivoltine silk cocoons - 180 kg, CB race',  'Cross-breed (CB) cocoons, current crop, good shell ratio. Ready this week.',180, 'kg',       480,  null),
   ('33333333-3333-3333-3333-000000000013', '22222222-2222-2222-2222-000000000001', 'demand',    'silk cocoons',             'Silk cocoons wanted - 200 kg @ Rs 500/kg',  'Bivoltine / CB race, reeling grade. Weekly pickup from Ramanagara market.', 200, 'kg',       500,  null),
-  ('33333333-3333-3333-3333-000000000014', '22222222-2222-2222-2222-000000000002', 'demand',    'vegetables',               'Table tomato & beans - 3 t, mandi + Rs 2',  'Aggregating for retail supply. Grade A/B, payment within 48 hrs.',          3,   'ton',      null, null)
+  ('33333333-3333-3333-3333-000000000014', '22222222-2222-2222-2222-000000000002', 'demand',    'vegetables',               'Table tomato & beans - 3 t, mandi + Rs 2',  'Aggregating for retail supply. Grade A/B, payment within 48 hrs.',          3,   'ton',      null, null),
+  -- Priced produce demand for the crop-yield simulator's live buyer-price lookup
+  -- (nearby_demand_listings). Categories match CROP_TO_SALE_CATEGORY in src/lib/cropEnterprise.ts.
+  ('33333333-3333-3333-3333-000000000015', '22222222-2222-2222-2222-000000000002', 'demand',    'tomatoes',                 'Table tomato - 5 t/week @ Rs 22,000/t',     'Grade A/B for retail. Payment within 48 hrs.',                             5,   'ton',      22000, null),
+  ('33333333-3333-3333-3333-000000000016', '22222222-2222-2222-2222-000000000002', 'demand',    'onions',                   'Onion - 10 t @ Rs 14,000/t',                'Cured medium-large bulbs. APMC + retail.',                                 10,  'ton',      14000, null),
+  ('33333333-3333-3333-3333-000000000017', '22222222-2222-2222-2222-000000000002', 'demand',    'potatoes',                 'Potato - 8 t @ Rs 12,500/t',                'Ware potato 45-75 mm. Weekly pickup from Mandya.',                          8,   'ton',      12500, null)
 ) as v(id, farmer_id, type, category, title, description, quantity, unit, rate, ifs_resource_type)
 on conflict (id) do update set
   type = excluded.type, category = excluded.category, title = excluded.title,

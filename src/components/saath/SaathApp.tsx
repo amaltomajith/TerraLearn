@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { SaathLayout } from './SaathLayout';
 import { FeedPage } from './FeedPage';
-import { MapPage } from './MapPage';
 import { MyListingsPage } from './MyListingsPage';
 import { ListingComposer } from './ListingComposer';
 import { MessagesPage } from './MessagesPage';
@@ -20,7 +19,6 @@ export default function SaathApp() {
       <Route element={<SaathLayout />}>
         <Route index element={<Navigate to="feed" replace />} />
         <Route path="feed" element={<FeedPage />} />
-        <Route path="map" element={<MapPage />} />
         <Route path="listings" element={<MyListingsPage />} />
         <Route path="listings/new" element={<ListingComposer />} />
         <Route path="messages" element={<MessagesPage />} />
