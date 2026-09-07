@@ -72,8 +72,13 @@ module-level. **PR2 (done):** the frontend assembles a compact `SaathSnapshot`
 (`src/lib/assistant/saathSnapshot.ts` — inbox, nearby farmers, IFS loops, own listings,
 nearby priced demand) from the existing Saath queries and sends it on every `/api/ask`;
 the backend formats it into the prompt. The assistant answers "who near me does paddy?",
-"any IFS loops to join?", "what's in my inbox?" from real data. **Still to come:** PR3 =
-draft-and-confirm messaging to other farmers.
+"any IFS loops to join?", "what's in my inbox?" from real data. **PR3 (done):** when the
+farmer asks to message someone, the model appends a `terralearn-action` JSON block; the
+backend parses it into `AskResponse.action`; the chat renders a draft card
+(`AssistantActionCard`) with an editable body + recipient village/distance; on Send the
+frontend resolves the name against the snapshot and calls the existing `sendMessage()` as
+the user. Nothing sends without the tap, and a name not in the snapshot disables Send. The
+backend holds no Supabase credentials, so the model can never send on its own.
 
 ---
 

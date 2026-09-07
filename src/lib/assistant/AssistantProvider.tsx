@@ -11,6 +11,7 @@ import {
 import { toast } from 'sonner';
 import { useIdentity } from '@/lib/identity/identity';
 import { getSupabase, isSupabaseConfigured } from '@/lib/saath/client';
+import { threadIdFor, sendMessage } from '@/lib/saath/queries';
 import { askAssistant } from './api';
 import { buildSaathSnapshot } from './saathSnapshot';
 import {
@@ -18,10 +19,12 @@ import {
   createThread,
   getLatestThread,
   getThreadMessages,
+  updateMessageMeta,
 } from './queries';
 import type {
   AskPayload,
   AssistantMessage,
+  AssistantMeta,
   AssistantPageContext,
   SaathSnapshot,
 } from './types';
@@ -42,8 +45,55 @@ interface AssistantContextValue {
   hasThread: boolean;
   send: (text: string) => Promise<void>;
   newChat: () => void;
+  confirmSend: (messageId: string, editedBody: string) => Promise<void>;
+  dismissAction: (messageId: string) => void;
+  /** Resolve a proposed recipient name against the current Saath snapshot (for the confirm card). */
+  recipientHint: (name: string) => RecipientMatch | null;
   pageContext: AssistantPageContext | null;
   setPageContext: (ctx: AssistantPageContext | null) => void;
+}
+
+interface RecipientMatch {
+  id: string;
+  name: string;
+  village?: string;
+  distanceKm?: number;
+  threadId?: string;
+}
+
+/** Resolve a name the model proposed to a real farmer id from the Saath snapshot. */
+function resolveRecipient(name: string, snap: SaathSnapshot | null): RecipientMatch | null {
+  if (!snap) return null;
+  const want = name.trim().toLowerCase();
+  if (!want) return null;
+  const cands: RecipientMatch[] = [
+    ...snap.inbox.map((i) => ({ id: i.otherId, name: i.otherName, threadId: i.threadId })),
+    ...snap.nearbyFarmers.map((f) => ({
+      id: f.id,
+      name: f.name,
+      village: f.village,
+      distanceKm: f.distanceKm,
+    })),
+    ...snap.ifsLoops.map((l) => ({
+      id: l.theirId,
+      name: l.theirName,
+      distanceKm: l.distanceKm,
+    })),
+    ...snap.nearbyDemand.map((b) => ({
+      id: b.buyerId,
+      name: b.buyerName,
+      distanceKm: b.distanceKm,
+    })),
+  ].filter((c) => c.id && c.name);
+  return (
+    cands.find((c) => c.name.toLowerCase() === want) ??
+    cands.find(
+      (c) =>
+        c.name.toLowerCase().startsWith(want) || want.startsWith(c.name.toLowerCase()),
+    ) ??
+    cands.find((c) => c.name.toLowerCase().includes(want)) ??
+    null
+  );
 }
 
 const Ctx = createContext<AssistantContextValue | null>(null);
@@ -185,6 +235,87 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setStatus('idle');
   }, []);
 
+  const patchMessageMeta = useCallback(
+    (messageId: string, meta: AssistantMeta) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, meta } : m)),
+      );
+      void updateMessageMeta(messageId, meta).catch(() => {
+        /* best effort — the local state already reflects the change */
+      });
+    },
+    [],
+  );
+
+  const dismissAction = useCallback(
+    (messageId: string) => {
+      const msg = messages.find((m) => m.id === messageId);
+      if (!msg?.meta?.action) return;
+      patchMessageMeta(messageId, { ...msg.meta, actionDismissed: true });
+    },
+    [messages, patchMessageMeta],
+  );
+
+  const recipientHint = useCallback(
+    (name: string) => resolveRecipient(name, snapshotRef.current.data),
+    [],
+  );
+
+  const confirmSend = useCallback(
+    async (messageId: string, editedBody: string) => {
+      const msg = messages.find((m) => m.id === messageId);
+      const action = msg?.meta?.action;
+      if (!msg || !action || msg.meta?.actionSentAt || !activeFarmerId) return;
+
+      const body = editedBody.trim();
+      if (!body) return;
+
+      const to = resolveRecipient(action.recipientName, snapshotRef.current.data);
+      if (!to) {
+        toast.error(`Couldn't find "${action.recipientName}" in your Saath network.`);
+        return;
+      }
+
+      try {
+        const targetThread = to.threadId ?? (await threadIdFor(activeFarmerId, to.id));
+        await sendMessage({
+          thread_id: targetThread,
+          sender_id: activeFarmerId,
+          recipient_id: to.id,
+          content: body,
+        });
+
+        const sentAt = new Date().toISOString();
+        const resolvedAction = {
+          ...action,
+          body,
+          recipientName: to.name,
+          recipientFarmerId: to.id,
+          threadId: targetThread,
+        };
+        patchMessageMeta(messageId, {
+          ...(msg.meta ?? {}),
+          action: resolvedAction,
+          actionSentAt: sentAt,
+        });
+
+        if (threadId) {
+          await appendMessage({
+            threadId,
+            role: 'system',
+            content: `Sent to ${to.name}`,
+            meta: { action: resolvedAction, actionSentAt: sentAt },
+          });
+        }
+        toast.success(`Message sent to ${to.name}`);
+      } catch (err) {
+        console.error('confirmSend failed:', err);
+        toast.error('Could not send the message. Please try again.');
+      }
+    },
+    [messages, activeFarmerId, threadId, patchMessageMeta],
+  );
+
   const send = useCallback(
     async (raw: string) => {
       const text = raw.trim();
@@ -283,10 +414,27 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       hasThread: Boolean(threadId),
       send,
       newChat,
+      confirmSend,
+      dismissAction,
+      recipientHint,
       pageContext,
       setPageContext,
     }),
-    [open, setOpen, messages, status, bootstrapped, threadId, send, newChat, pageContext, setPageContext],
+    [
+      open,
+      setOpen,
+      messages,
+      status,
+      bootstrapped,
+      threadId,
+      send,
+      newChat,
+      confirmSend,
+      dismissAction,
+      recipientHint,
+      pageContext,
+      setPageContext,
+    ],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -42,8 +42,12 @@ export async function askAssistant(
 
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = (await res.json()) as { answer?: string; action?: AskResult['action'] };
+  const action =
+    data.action && data.action.type === 'send_message' && data.action.recipientName && data.action.body
+      ? data.action
+      : undefined;
   return {
     answer: data.answer || 'No response generated.',
-    action: data.action,
+    action,
   };
 }

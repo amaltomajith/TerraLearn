@@ -57,12 +57,12 @@ export interface AssistantPageContext {
 
 export interface AssistantAction {
   type: 'send_message';
-  recipientFarmerId: string;
+  /** The model proposes a name; the frontend resolves it against the Saath snapshot. */
   recipientName: string;
-  threadId?: string | null;
   body: string;
-  contextType?: string | null;
-  contextId?: string | null;
+  /** Filled in by the client resolver at confirm time. */
+  recipientFarmerId?: string;
+  threadId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,10 +122,12 @@ export interface AssistantThread {
 export interface AssistantMeta {
   /** Which provider served the answer: 'groq' | 'openrouter_fallback'. */
   provider?: string;
-  /** PR3: a pending / completed message-send proposal. */
+  /** A pending / completed message-send proposal. */
   action?: AssistantAction;
-  /** PR3: ISO timestamp set once the user confirms the send. */
+  /** ISO timestamp set once the user confirms the send. */
   actionSentAt?: string;
+  /** Set if the user dismissed the proposal without sending. */
+  actionDismissed?: boolean;
 }
 
 export interface AssistantMessage {

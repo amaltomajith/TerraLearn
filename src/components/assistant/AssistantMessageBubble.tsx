@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Bot, User } from 'lucide-react';
 import { Markdown } from '@/lib/assistant/renderMarkdown';
 import type { AssistantMessage } from '@/lib/assistant/types';
+import { AssistantActionCard } from './AssistantActionCard';
 
 export function AssistantMessageBubble({ message }: { message: AssistantMessage }) {
   // PR3 renders a "Sent to X" confirmation line from system rows.
@@ -41,6 +42,9 @@ export function AssistantMessageBubble({ message }: { message: AssistantMessage 
           <p className="whitespace-pre-wrap">{message.content}</p>
         ) : (
           <Markdown>{message.content}</Markdown>
+        )}
+        {!isUser && message.meta?.action && !message.meta.actionDismissed && (
+          <AssistantActionCard message={message} />
         )}
       </div>
 
