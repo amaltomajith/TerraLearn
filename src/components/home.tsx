@@ -39,6 +39,7 @@ import {
   AlertTriangle,
   RefreshCw,
   Users,
+  Info,
 } from 'lucide-react';
 import {
   fetchClimateData,
@@ -616,6 +617,12 @@ function Home() {
                   <MetricCard icon={Leaf} label="Nitrogen" value={soilData?.nitrogen ?? '—'} unit="ppm" isLoading={!soilData} delay={4} />
                   <MetricCard icon={TestTube2} label="Phosphorus" value={soilData?.phosphorus ?? '—'} unit="ppm" isLoading={!soilData} delay={5} />
                 </div>
+                {soilData?.source === 'estimated' && (
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <Info className="w-3 h-3 shrink-0" />
+                    estimated · soil data unavailable for this location
+                  </p>
+                )}
               </motion.div>
             )}
 
