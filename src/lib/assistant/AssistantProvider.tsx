@@ -48,7 +48,7 @@ interface AssistantContextValue {
   confirmSend: (messageId: string, editedBody: string) => Promise<void>;
   dismissAction: (messageId: string) => void;
   /** Resolve a proposed recipient name against the current Saath snapshot (for the confirm card). */
-  recipientHint: (name: string) => RecipientMatch | null;
+  recipientHint: (name: string) => RecipientResolution;
   pageContext: AssistantPageContext | null;
   setPageContext: (ctx: AssistantPageContext | null) => void;
 }
@@ -61,11 +61,23 @@ interface RecipientMatch {
   threadId?: string;
 }
 
+/**
+ * `ambiguous` is deliberate: if the model's proposed name matches more than one
+ * distinct Saath contact we do NOT silently pick one — the confirm card refuses
+ * and tells the farmer to message from Saath directly. The whole point of the
+ * confirm step is that the human knows exactly who a message goes to.
+ */
+type RecipientResolution =
+  | { status: 'ok'; match: RecipientMatch }
+  | { status: 'none' }
+  | { status: 'ambiguous'; names: string[] };
+
 /** Resolve a name the model proposed to a real farmer id from the Saath snapshot. */
-function resolveRecipient(name: string, snap: SaathSnapshot | null): RecipientMatch | null {
-  if (!snap) return null;
+function resolveRecipient(name: string, snap: SaathSnapshot | null): RecipientResolution {
+  if (!snap) return { status: 'none' };
   const want = name.trim().toLowerCase();
-  if (!want) return null;
+  if (!want) return { status: 'none' };
+
   const cands: RecipientMatch[] = [
     ...snap.inbox.map((i) => ({ id: i.otherId, name: i.otherName, threadId: i.threadId })),
     ...snap.nearbyFarmers.map((f) => ({
@@ -85,15 +97,26 @@ function resolveRecipient(name: string, snap: SaathSnapshot | null): RecipientMa
       distanceKm: b.distanceKm,
     })),
   ].filter((c) => c.id && c.name);
-  return (
-    cands.find((c) => c.name.toLowerCase() === want) ??
-    cands.find(
-      (c) =>
-        c.name.toLowerCase().startsWith(want) || want.startsWith(c.name.toLowerCase()),
-    ) ??
-    cands.find((c) => c.name.toLowerCase().includes(want)) ??
-    null
-  );
+
+  const tiers: Array<(c: RecipientMatch) => boolean> = [
+    (c) => c.name.toLowerCase() === want,
+    (c) =>
+      c.name.toLowerCase().startsWith(want) || want.startsWith(c.name.toLowerCase()),
+    (c) => c.name.toLowerCase().includes(want),
+  ];
+
+  for (const test of tiers) {
+    const hits = cands.filter(test);
+    if (hits.length === 0) continue;
+    // The same person can appear in several snapshot lists (same id) — that's
+    // not ambiguity. Dedupe by id, keeping the first (closest / richest) hit.
+    const byId = new Map<string, RecipientMatch>();
+    for (const h of hits) if (!byId.has(h.id)) byId.set(h.id, h);
+    const unique = [...byId.values()];
+    if (unique.length === 1) return { status: 'ok', match: unique[0] };
+    return { status: 'ambiguous', names: [...new Set(unique.map((m) => m.name))] };
+  }
+  return { status: 'none' };
 }
 
 const Ctx = createContext<AssistantContextValue | null>(null);
@@ -270,11 +293,18 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       const body = editedBody.trim();
       if (!body) return;
 
-      const to = resolveRecipient(action.recipientName, snapshotRef.current.data);
-      if (!to) {
+      const resolution = resolveRecipient(action.recipientName, snapshotRef.current.data);
+      if (resolution.status === 'ambiguous') {
+        toast.error(
+          `More than one contact matches "${action.recipientName}" — message them from Saath directly.`,
+        );
+        return;
+      }
+      if (resolution.status !== 'ok') {
         toast.error(`Couldn't find "${action.recipientName}" in your Saath network.`);
         return;
       }
+      const to = resolution.match;
 
       try {
         const targetThread = to.threadId ?? (await threadIdFor(activeFarmerId, to.id));

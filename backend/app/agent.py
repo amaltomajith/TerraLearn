@@ -65,6 +65,8 @@ def build_system_prompt(language=None, name=None, village=None, enterprises=None
         "- Use simple everyday words and short sentences (class-6 reading level).\n"
         "- Mention only the one or two numbers that matter for the question. Never list every metric.\n"
         "- Never invent a number. If a value is not in the context and no tool gives it, say you don't have it.\n"
+        "- Never repeat a previous answer word-for-word. If the farmer just says 'ok', 'hi', "
+        "'thanks' or similar, reply in one short line - don't re-explain.\n"
         "- If you are unsure, say so briefly and say what would help.\n\n"
         "CONTEXT & TOOLS:\n"
         "- The user prompt already carries the current pin's weather, soil, air quality and "
@@ -76,15 +78,17 @@ def build_system_prompt(language=None, name=None, village=None, enterprises=None
         "(e.g. 'the WHO guide says') — a formal citation is optional.\n"
         "- If a crop-simulation result is in the prompt, use its numbers.\n\n"
         "MESSAGING OTHER FARMERS:\n"
-        "- If the farmer asks you to message / tell / reply to / ask someone who appears in the "
-        "Saath block, DO NOT say you sent it. Write ONE short sentence like 'I've drafted a "
-        "message to <name> - check it below and tap Send', then on a new line append EXACTLY:\n"
+        "- If the farmer asks you to message / tell / reply to / ask / connect with someone who "
+        "appears in the Saath block, DO NOT say you sent it and DO NOT show the JSON to them. "
+        "Write ONE short sentence like 'I've drafted a message to <name> - check it below and "
+        "tap Send', then on the next line append ONLY this fenced block (the app hides it and "
+        "shows a card):\n"
         "```terralearn-action\n"
         '{"type":"send_message","recipientName":"<their exact name from the Saath block>","body":"<the message, in the farmer\'s language>"}\n'
         "```\n"
-        "- Use only a name that appears in the Saath block. If you cannot tell who they mean, "
-        "ask them - do not append a block. Never append a block unless they clearly asked to "
-        "send a message.\n\n"
+        "- Put nothing after the closing ```. Use only a name that appears in the Saath block. "
+        "If you cannot tell who they mean, ask them - do not append a block. Never append a "
+        "block unless they clearly asked to send/connect.\n\n"
         "YOUR SAATH NETWORK:\n"
         "- If a '== Your Saath network right now ==' block is in the prompt, it lists the "
         "farmer's real inbox, nearby farmers, circular-farming (IFS) loops, their own listings, "
@@ -100,29 +104,73 @@ def build_system_prompt(language=None, name=None, village=None, enterprises=None
 SYSTEM_PROMPT = build_system_prompt()
 
 
-_ACTION_RE = re.compile(r"```terralearn-action\s*(\{.*?\})\s*```", re.DOTALL)
+_OPEN_FENCE_RE = re.compile(r"```[a-zA-Z0-9_-]*[ \t]*\n?\s*$")
+_CLOSE_FENCE_RE = re.compile(r"^\s*```")
+
+
+def _find_send_message_object(text: str):
+    """Locate a brace-balanced JSON object declaring a send_message action.
+
+    Tolerates the model fencing it (```terralearn-action / ```json / ```) or
+    dropping it in raw. Returns (start, end, obj) or None.
+    """
+    search_from = 0
+    while True:
+        marker = text.find('"type"', search_from)
+        if marker == -1:
+            return None
+        search_from = marker + 6
+        start = text.rfind("{", 0, marker)
+        if start == -1:
+            continue
+        depth = 0
+        end = None
+        for i in range(start, len(text)):
+            ch = text[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        if end is None:
+            continue
+        try:
+            obj = json.loads(text[start:end])
+        except Exception:
+            continue
+        if isinstance(obj, dict) and obj.get("type") == "send_message":
+            return start, end, obj
 
 
 def extract_action(text: str):
-    """Pull a trailing ```terralearn-action``` JSON block out of the answer.
+    """Pull a send_message action block out of the answer.
 
     Returns (cleaned_text, action_dict | None). Fails soft: any parse/shape
-    problem returns the block stripped and action=None.
+    problem returns the block stripped and action=None. Robust to whichever
+    model emits the JSON fenced, bare, or with a stray language tag.
     """
     if not text:
         return text, None
-    m = _ACTION_RE.search(text)
-    if not m:
+    hit = _find_send_message_object(text)
+    if not hit:
         return text, None
-    cleaned = (text[: m.start()] + text[m.end():]).strip()
-    try:
-        data = json.loads(m.group(1))
-    except Exception:
-        return cleaned, None
-    if not isinstance(data, dict) or data.get("type") != "send_message":
-        return cleaned, None
-    name = str(data.get("recipientName") or "").strip()
-    body = str(data.get("body") or "").strip()
+    start, end, obj = hit
+
+    # Swallow an enclosing code fence + surrounding blank lines so the bubble
+    # isn't left with a dangling ``` or an empty "```json" line.
+    head, tail = text[:start], text[end:]
+    m = _OPEN_FENCE_RE.search(head)
+    if m:
+        head = head[: m.start()]
+    m = _CLOSE_FENCE_RE.match(tail)
+    if m:
+        tail = tail[m.end():]
+    cleaned = re.sub(r"\n{3,}", "\n\n", (head + tail)).strip()
+
+    name = str(obj.get("recipientName") or "").strip()
+    body = str(obj.get("body") or "").strip()
     if not name or not body:
         return cleaned, None
     return cleaned, {"type": "send_message", "recipientName": name, "body": body}

@@ -18,7 +18,9 @@ export function AssistantActionCard({ message }: { message: AssistantMessage }) 
 
   if (!action) return null;
 
-  const match = sentAt ? null : recipientHint(action.recipientName);
+  const resolution = sentAt ? null : recipientHint(action.recipientName);
+  const match = resolution?.status === 'ok' ? resolution.match : null;
+  const canSend = resolution?.status === 'ok';
   const subtitle = match
     ? [match.village, match.distanceKm != null ? `${match.distanceKm} km` : null]
         .filter(Boolean)
@@ -66,7 +68,13 @@ export function AssistantActionCard({ message }: { message: AssistantMessage }) 
       </p>
       {subtitle ? (
         <p className="mb-1.5 text-[11px] text-muted-foreground">{subtitle}</p>
-      ) : !match ? (
+      ) : resolution?.status === 'ambiguous' ? (
+        <p className="mb-1.5 text-[11px] text-amber-600 dark:text-amber-500">
+          More than one contact matches this name
+          {resolution.names.length ? ` (${resolution.names.join(', ')})` : ''} — open Saath
+          to message the right person.
+        </p>
+      ) : resolution?.status === 'none' ? (
         <p className="mb-1.5 text-[11px] text-amber-600 dark:text-amber-500">
           Not found in your Saath network — check the name before sending.
         </p>
@@ -84,8 +92,14 @@ export function AssistantActionCard({ message }: { message: AssistantMessage }) 
         <button
           type="button"
           onClick={onSend}
-          disabled={busy || !body.trim() || !match}
-          title={!match ? 'Recipient not found in your Saath network' : undefined}
+          disabled={busy || !body.trim() || !canSend}
+          title={
+            resolution?.status === 'ambiguous'
+              ? 'More than one contact matches — message from Saath directly'
+              : !canSend
+                ? 'Recipient not found in your Saath network'
+                : undefined
+          }
           className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
         >
           <Send className="h-3.5 w-3.5" />
