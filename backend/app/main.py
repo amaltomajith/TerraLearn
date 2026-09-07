@@ -76,6 +76,52 @@ class ChatTurn(BaseModel):
     role: str            # 'user' | 'assistant'
     content: str
 
+# --- Saath snapshot (assembled by the frontend, all fields optional) --------
+
+class SaathInboxItem(BaseModel):
+    threadId: Optional[str] = None
+    otherId: Optional[str] = None
+    otherName: Optional[str] = None
+    lastSnippet: Optional[str] = None
+    fromMe: Optional[bool] = None
+    unreadish: Optional[bool] = None
+    at: Optional[str] = None
+
+class SaathNearbyFarmer(BaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+    village: Optional[str] = None
+    enterprises: Optional[List[str]] = None
+    distanceKm: Optional[float] = None
+
+class SaathIfsLoop(BaseModel):
+    resource: Optional[str] = None
+    direction: Optional[str] = None      # 'i_supply' | 'i_need'
+    theirId: Optional[str] = None
+    theirName: Optional[str] = None
+    distanceKm: Optional[float] = None
+
+class SaathListing(BaseModel):
+    id: Optional[str] = None
+    type: Optional[str] = None
+    title: Optional[str] = None
+    active: Optional[bool] = None
+
+class SaathBuyer(BaseModel):
+    buyerId: Optional[str] = None
+    buyerName: Optional[str] = None
+    category: Optional[str] = None
+    rate: Optional[float] = None
+    unit: Optional[str] = None
+    distanceKm: Optional[float] = None
+
+class SaathSnapshot(BaseModel):
+    inbox: Optional[List[SaathInboxItem]] = None
+    nearbyFarmers: Optional[List[SaathNearbyFarmer]] = None
+    ifsLoops: Optional[List[SaathIfsLoop]] = None
+    myListings: Optional[List[SaathListing]] = None
+    nearbyDemand: Optional[List[SaathBuyer]] = None
+
 class AskRequest(BaseModel):
     question: str
     lat: Optional[float] = None
@@ -93,9 +139,54 @@ class AskRequest(BaseModel):
     farmerName: Optional[str] = None
     village: Optional[str] = None
     enterprises: Optional[List[str]] = None
+    saath: Optional[SaathSnapshot] = None
 
 class AskResponse(BaseModel):
     answer: str
+
+
+def _format_saath(s: SaathSnapshot) -> str:
+    """Render the Saath snapshot as a compact plain-text block for the prompt."""
+    lines = ["== Your Saath network right now =="]
+
+    if s.inbox:
+        lines.append("Inbox (newest first):")
+        for m in s.inbox:
+            who = m.otherName or "a farmer"
+            tag = "[looks unread] " if m.unreadish else ""
+            arrow = "you replied: " if m.fromMe else ""
+            snip = (m.lastSnippet or "").replace("\n", " ").strip()
+            date = f" ({m.at})" if m.at else ""
+            lines.append(f'- {tag}{arrow}{who}: "{snip}"{date}')
+
+    if s.nearbyFarmers:
+        lines.append("Farmers near you:")
+        for f in s.nearbyFarmers:
+            ent = ", ".join(f.enterprises or []) or "-"
+            dist = f" - {f.distanceKm} km" if f.distanceKm is not None else ""
+            lines.append(f"- {f.name or 'a farmer'} ({f.village or '-'}): {ent}{dist}")
+
+    if s.ifsLoops:
+        lines.append("Open circular-farming (IFS) loops:")
+        for loop in s.ifsLoops:
+            verb = "you can supply" if loop.direction == "i_supply" else "you could use"
+            dist = f", {loop.distanceKm} km" if loop.distanceKm is not None else ""
+            lines.append(f"- {verb} {loop.resource} <-> {loop.theirName}{dist}")
+
+    if s.myListings:
+        lines.append("Your listings:")
+        for lst in s.myListings:
+            state = "" if lst.active else " (inactive)"
+            lines.append(f"- [{lst.type}] {lst.title}{state}")
+
+    if s.nearbyDemand:
+        lines.append("Nearby buyers paying for produce:")
+        for b in s.nearbyDemand:
+            price = f" @ {b.rate}/{b.unit or 'unit'}" if b.rate is not None else ""
+            dist = f" ({b.distanceKm} km)" if b.distanceKm is not None else ""
+            lines.append(f"- {b.buyerName or 'a buyer'} wants {b.category}{price}{dist}")
+
+    return "\n".join(lines) if len(lines) > 1 else ""
 
 class RiskBriefRequest(BaseModel):
     lat: float
@@ -188,6 +279,11 @@ async def ask_question(req: AskRequest):
                     line += f" ({b.distanceKm} km away)"
                 lines.append(line)
             formatted_input += "\nNearby buyer demand:\n" + "\n".join(lines)
+
+        if req.saath:
+            saath_block = _format_saath(req.saath)
+            if saath_block:
+                formatted_input += "\n" + saath_block
 
         system_prompt = build_system_prompt(
             req.farmerLanguage, req.farmerName, req.village, req.enterprises

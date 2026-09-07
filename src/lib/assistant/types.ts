@@ -66,6 +66,47 @@ export interface AssistantAction {
 }
 
 // ---------------------------------------------------------------------------
+// Saath snapshot (PR2) — a compact, frontend-assembled view of the farmer's
+// Saath network, sent as structured context on every /api/ask call. All lists
+// are hard-capped client-side to stay inside the token budget.
+// ---------------------------------------------------------------------------
+
+export interface SaathSnapshot {
+  inbox: {
+    threadId: string;
+    otherId: string;
+    otherName: string;
+    lastSnippet: string;
+    fromMe: boolean;
+    unreadish: boolean;
+    at: string; // YYYY-MM-DD
+  }[];
+  nearbyFarmers: {
+    id: string;
+    name: string;
+    village?: string;
+    enterprises: string[];
+    distanceKm?: number;
+  }[];
+  ifsLoops: {
+    resource: string;
+    direction: 'i_supply' | 'i_need';
+    theirId: string;
+    theirName: string;
+    distanceKm?: number;
+  }[];
+  myListings: { id: string; type: string; title: string; active: boolean }[];
+  nearbyDemand: {
+    buyerId: string;
+    buyerName: string;
+    category: string;
+    rate?: number;
+    unit?: string;
+    distanceKm?: number;
+  }[];
+}
+
+// ---------------------------------------------------------------------------
 // Conversation memory (assistant_threads / assistant_messages)
 // ---------------------------------------------------------------------------
 
@@ -116,6 +157,7 @@ export interface AskPayload {
   suggestedCrops?: string[];
   mandiTrendPct?: number;
   buyerDemand?: AssistantExtraContext['buyerDemand'];
+  saath?: SaathSnapshot;
 }
 
 export interface AskResult {

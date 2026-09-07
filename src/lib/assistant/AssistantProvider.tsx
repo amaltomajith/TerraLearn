@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { useIdentity } from '@/lib/identity/identity';
 import { getSupabase, isSupabaseConfigured } from '@/lib/saath/client';
 import { askAssistant } from './api';
+import { buildSaathSnapshot } from './saathSnapshot';
 import {
   appendMessage,
   createThread,
@@ -22,11 +23,13 @@ import type {
   AskPayload,
   AssistantMessage,
   AssistantPageContext,
+  SaathSnapshot,
 } from './types';
 
 const OPEN_KEY = 'terralearn-assistant-open';
 const HISTORY_TURNS = 10;
 const TURN_CHAR_CAP = 1500;
+const SNAPSHOT_TTL_MS = 30_000;
 
 type Status = 'idle' | 'loading' | 'error';
 
@@ -82,6 +85,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const abortRef = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
+  const snapshotRef = useRef<{ data: SaathSnapshot | null; at: number }>({
+    data: null,
+    at: 0,
+  });
 
   const setOpen = useCallback((b: boolean) => {
     setOpenState(b);
@@ -95,6 +102,27 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const setPageContext = useCallback((ctx: AssistantPageContext | null) => {
     setPageContextState(ctx);
   }, []);
+
+  const refreshSnapshot = useCallback(
+    async (force = false) => {
+      if (!activeFarmerId || !isSupabaseConfigured) return;
+      if (!force && Date.now() - snapshotRef.current.at < SNAPSHOT_TTL_MS) return;
+      try {
+        snapshotRef.current = {
+          data: await buildSaathSnapshot(activeFarmerId),
+          at: Date.now(),
+        };
+      } catch {
+        /* keep the previous snapshot */
+      }
+    },
+    [activeFarmerId],
+  );
+
+  // Warm the Saath snapshot when the panel is opened.
+  useEffect(() => {
+    if (open) void refreshSnapshot();
+  }, [open, refreshSnapshot]);
 
   // --- load the most recent thread once the farmer is known ----------------
   useEffect(() => {
@@ -193,6 +221,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         }
         await appendMessage({ threadId: tid, role: 'user', content: text });
 
+        await refreshSnapshot();
+
         const pc = pageContext;
         const extra = pc?.assistantContext ?? undefined;
         const payload: AskPayload = {
@@ -210,6 +240,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           suggestedCrops: extra?.suggestedCrops,
           mandiTrendPct: extra?.mandiTrendPct,
           buyerDemand: extra?.buyerDemand,
+          saath: snapshotRef.current.data ?? undefined,
         };
 
         const result = await askAssistant(payload, ac.signal);
@@ -239,7 +270,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         sendingRef.current = false;
       }
     },
-    [activeFarmerId, activeFarmer, primaryFarm, messages, threadId, pageContext],
+    [activeFarmerId, activeFarmer, primaryFarm, messages, threadId, pageContext, refreshSnapshot],
   );
 
   const value = useMemo<AssistantContextValue>(

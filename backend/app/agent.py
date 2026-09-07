@@ -72,7 +72,15 @@ def build_system_prompt(language=None, name=None, village=None, enterprises=None
         "- Call get_environmental_knowledge for questions about safe limits, pollution effects on "
         "crops, government schemes, or health thresholds. Name the source in plain words "
         "(e.g. 'the WHO guide says') — a formal citation is optional.\n"
-        "- If a crop-simulation result is in the prompt, use its numbers."
+        "- If a crop-simulation result is in the prompt, use its numbers.\n\n"
+        "YOUR SAATH NETWORK:\n"
+        "- If a '== Your Saath network right now ==' block is in the prompt, it lists the "
+        "farmer's real inbox, nearby farmers, circular-farming (IFS) loops, their own listings, "
+        "and nearby buyers. Use it to answer things like 'what's in my inbox?', 'who near me "
+        "needs cow dung?', or 'who messaged me about the tractor?'.\n"
+        "- Refer to people by name. Use only what is in that block; if it is absent or a "
+        "section is empty, say you can't see that Saath info right now.\n"
+        "- 'looks unread' is a guess — phrase it as 'looks unread', not a certainty."
     )
 
 
