@@ -125,8 +125,9 @@ accounts + their `7777…`-prefixed primary farms on a demo reset.
 - Vite bakes env vars at **build time** — after changing any, you must **redeploy**.
 
 ### Render — backend (`terralearn-backend`)
-- **Live URL: `https://terralearn-backend.onrender.com`** — this is the value that goes
+- **Live URL: `https://terralearn-n3br.onrender.com`** — this is the value that goes
   into Vercel's `VITE_API_BASE_URL` and the `RENDER_BACKEND_URL` GitHub Actions variable.
+  (Render appended the `-n3br` suffix; the `render.yaml` `name:` is still `terralearn-backend`.)
 - Blueprint: `render.yaml` (root). Free web-service tier, `rootDir: backend`, Singapore.
 - Endpoints: `GET /` and `GET /health` (liveness, no heavy logic), `POST /api/ask`,
   `POST /api/risk-brief`.
@@ -198,7 +199,7 @@ Backend (unchanged this session): `backend/` FastAPI, `python run_backend.py` or
 ## Known issues / tech debt
 
 1. **`VITE_API_BASE_URL` not set on Vercel** → AI panels 404 in production. Set it to
-   `https://terralearn-backend.onrender.com` on `terra-learn-tozc` and redeploy.
+   `https://terralearn-n3br.onrender.com` on `terra-learn-tozc` and redeploy.
 2. **Clerk is a *test* instance** (`pk_test_`) — has strict rate limits, not for real launch.
 3. **Main JS bundle is ~1.4 MB** (Clerk now loads on `/` too). Acceptable for a demo; could
    `manualChunks` Clerk/Supabase later.

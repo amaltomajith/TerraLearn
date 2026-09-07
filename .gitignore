@@ -47,3 +47,4 @@ scripts/.artifacts/
 .env.seed-accounts.local
 
 **/tempobook/**
+.vercel

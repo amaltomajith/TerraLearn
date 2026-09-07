@@ -6,7 +6,7 @@ name: Keep Render backend awake
 #
 # Set the repo variable RENDER_BACKEND_URL (Settings -> Secrets and variables ->
 # Actions -> Variables) to the live base URL, e.g.
-#   https://terralearn-backend.onrender.com
+#   https://terralearn-n3br.onrender.com
 # The fallback below keeps the job working if the variable is unset.
 
 on:
@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Curl /health
         run: |
-          BASE="${{ vars.RENDER_BACKEND_URL || 'https://terralearn-backend.onrender.com' }}"
+          BASE="${{ vars.RENDER_BACKEND_URL || 'https://terralearn-n3br.onrender.com' }}"
           echo "Pinging ${BASE}/health"
           code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 150 --retry 2 --retry-delay 20 "${BASE}/health" || true)
           echo "HTTP ${code}"
