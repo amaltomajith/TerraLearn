@@ -6,14 +6,16 @@ import NavAuthControl from './saath/NavAuthControl';
 import { MapView, type IfsConnection } from './MapView';
 import { FarmSwitcher } from './FarmSwitcher';
 import { DockedAssistant } from './DockedAssistant';
+import type { AssistantExtraContext } from './AskTerraLearn';
 import { useIdentity } from '@/lib/identity/identity';
-import { getMapPoints, getIfsLoops } from '@/lib/saath/queries';
-import type { MapPointRow, IfsMatchRow } from '@/lib/saath/types';
+import { getMapPoints, getIfsLoops, nearbyDemandListings } from '@/lib/saath/queries';
+import type { MapPointRow, IfsMatchRow, NearbyDemandRow } from '@/lib/saath/types';
 import { CropSelector } from './CropSelector';
 import { DateSelector } from './DateSelector';
 import { MetricCard } from './MetricCard';
 import { FinancialResults } from './FinancialResults';
 import { CropSuggestions } from './CropSuggestions';
+import { MarketSignal } from './MarketSignal';
 import { SimulationStatus, type SimulationStep } from './SimulationStatus';
 import { TrendChart } from './TrendChart';
 import { EnvironmentalOutlook, type RiskBriefContext } from './EnvironmentalOutlook';
@@ -45,7 +47,7 @@ import {
   fetchAirQualityData,
   fetchClimateTrends,
   calculateYield,
-  suggestCrops,
+  fetchMandiPrices,
   getSeason,
   CROP_DATABASE,
   type ClimateData,
@@ -55,7 +57,14 @@ import {
   type CropInfo,
   type AirQualityData,
   type ClimateTrendsData,
+  type MandiPriceSeries,
 } from '@/lib/api';
+import {
+  suggestCropsWithCircular,
+  demandRatePerTon,
+  CROP_TO_SALE_CATEGORY,
+  type CircularOpportunity,
+} from '@/lib/cropEnterprise';
 import { toast } from 'sonner';
 
 function Home() {
@@ -85,10 +94,12 @@ function Home() {
   const [envError, setEnvError] = useState<string | null>(null);
 
   const [cropSuggestions, setCropSuggestions] = useState<
-    { crop: CropInfo; score: number; reasons: string[] }[]
+    { crop: CropInfo; score: number; reasons: string[]; circular?: CircularOpportunity }[]
   >([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [currentSeason, setCurrentSeason] = useState('');
+  const [demandMatches, setDemandMatches] = useState<NearbyDemandRow[]>([]);
+  const [mandiSeries, setMandiSeries] = useState<MandiPriceSeries | null>(null);
 
   // Location snapshot: air quality + 5yr trends + current climate + soil.
   const loadEnvData = useCallback(async (lat: number, lng: number) => {
@@ -119,6 +130,8 @@ function Home() {
       setSoilData(null);
       setShowSuggestions(false);
       setCropSuggestions([]);
+      setDemandMatches([]);
+      setMandiSeries(null);
       setSimulationStep('idle');
 
       fetchLocationInfo(lat, lng)
@@ -221,6 +234,25 @@ function Home() {
     return [...byKey.values()];
   }, [primaryFarm, ifsRows]);
 
+  // Suggestion-first flow: once a pin has soil + climate AND a planting date is
+  // picked, surface ranked crop suggestions (with circular-agriculture weighting)
+  // before the user has chosen a crop or run a simulation.
+  const autoSuggestions = useMemo(() => {
+    if (!position || !climateData || !soilData || !plantingDate) return [];
+    return suggestCropsWithCircular(
+      climateData,
+      soilData,
+      plantingDate,
+      position.lat,
+      neighbours,
+    );
+  }, [position, climateData, soilData, plantingDate, neighbours]);
+
+  const suggestionSeason = useMemo(
+    () => (position && plantingDate ? getSeason(plantingDate, position.lat) : ''),
+    [position, plantingDate],
+  );
+
   const handleSimulate = async () => {
     if (!position || !selectedCrop || !plantingDate) {
       toast.error('Please complete all fields before simulating');
@@ -250,6 +282,45 @@ function Home() {
       setClimateData(climate);
       setSoilData(soil);
 
+      // Market signals (India pins only — rates are INR, matching exchangeRate).
+      let marketOverride:
+        | { pricePerTon: number; buyerName: string; distanceKm: number }
+        | undefined;
+      let mandiRef: { pricePerTon: number; trendPct: number } | undefined;
+      let demandRows: NearbyDemandRow[] = [];
+      let series: MandiPriceSeries | null = null;
+      if (locInfo.countryCode === 'IN') {
+        series = await fetchMandiPrices(selectedCrop, { state: 'Karnataka' });
+        if (series) mandiRef = { pricePerTon: series.latestPerTon, trendPct: series.trendPct };
+
+        const saleCategory = CROP_TO_SALE_CATEGORY[selectedCrop.toLowerCase()];
+        if (saleCategory) {
+          try {
+            demandRows = await nearbyDemandListings(
+              position.lat,
+              position.lng,
+              saleCategory,
+              100000,
+            );
+            for (const d of demandRows) {
+              const perTon = demandRatePerTon(d.rate, d.unit);
+              if (perTon) {
+                marketOverride = {
+                  pricePerTon: perTon,
+                  buyerName: d.buyer_name,
+                  distanceKm: Math.round(((d.distance_m ?? 0) / 1000) * 10) / 10,
+                };
+                break;
+              }
+            }
+          } catch {
+            /* silent — fall back to reference/mandi price */
+          }
+        }
+      }
+      setDemandMatches(demandRows);
+      setMandiSeries(series);
+
       setSimulationStep('calculating');
       const hectares = areaUnit === 'acres' ? areaHectares * 0.404686 : areaHectares;
       const calculatedResults = calculateYield(
@@ -260,12 +331,20 @@ function Home() {
         position.lat,
         locInfo.exchangeRate,
         hectares,
+        marketOverride,
+        mandiRef,
       );
       setResults(calculatedResults);
 
       const season = getSeason(plantingDate, position.lat);
       setCurrentSeason(season);
-      const suggestions = suggestCrops(climate, soil, plantingDate, position.lat);
+      const suggestions = suggestCropsWithCircular(
+        climate,
+        soil,
+        plantingDate,
+        position.lat,
+        neighbours,
+      );
       setCropSuggestions(suggestions);
 
       setSimulationStep('complete');
@@ -325,6 +404,37 @@ function Home() {
     };
   }, [results, selectedCrop, plantingDate]);
 
+  // Always-present, refreshed context for the chat assistant — the current pin's
+  // environment snapshot, the ranked suggestions, and nearby buyer demand.
+  const assistantContext = useMemo<AssistantExtraContext>(
+    () => ({
+      locationName: locationInfo?.country,
+      env: {
+        temperature: climateData?.temperature,
+        precipitation: climateData?.precipitation,
+        humidity: climateData?.humidity,
+        soilPH: soilData?.pH,
+        soilNitrogen: soilData?.nitrogen,
+        soilPhosphorus: soilData?.phosphorus,
+        usAqi: airQualityData?.current?.usAqi,
+        pm2_5: airQualityData?.current?.pm2_5,
+        pm10: airQualityData?.current?.pm10,
+        ozone: airQualityData?.current?.ozone,
+      },
+      suggestedCrops: autoSuggestions.slice(0, 5).map((s) => s.crop.name),
+      mandiTrendPct: mandiSeries?.trendPct,
+      buyerDemand: demandMatches.map((d) => ({
+        buyerName: d.buyer_name,
+        category: d.category ?? '',
+        rate: d.rate ?? undefined,
+        unit: d.unit ?? undefined,
+        distanceKm:
+          d.distance_m != null ? Math.round((d.distance_m / 1000) * 10) / 10 : undefined,
+      })),
+    }),
+    [locationInfo, climateData, soilData, airQualityData, autoSuggestions, mandiSeries, demandMatches],
+  );
+
   const riskBriefContext: RiskBriefContext | null = useMemo(() => {
     if (!results || !selectedCrop || !plantingDate || !position || !showResults) return null;
     return {
@@ -374,7 +484,7 @@ function Home() {
     <div className="min-h-screen bg-background relative">
       <Navigation authSlot={<NavAuthControl />} />
 
-      <main className="pt-24 pb-24 px-4 sm:px-6 max-w-[1600px] mx-auto">
+      <main className="pt-24 pb-24 px-4 sm:px-6 max-w-[1800px] mx-auto">
         <motion.div
           className="mb-6"
           initial={{ opacity: 0, y: 16 }}
@@ -646,16 +756,32 @@ function Home() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Crop Type
-                  </label>
-                  <CropSelector selectedCrop={selectedCrop} onCropChange={setSelectedCrop} />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                     Planting Date
                   </label>
                   <DateSelector date={plantingDate} onDateChange={setPlantingDate} />
+                  {position && climateData && soilData && !plantingDate && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Pick a planting date to see crop suggestions for this spot.
+                    </p>
+                  )}
+                </div>
+
+                <CropSuggestions
+                  suggestions={autoSuggestions}
+                  season={suggestionSeason}
+                  plantingDate={plantingDate}
+                  lat={position?.lat}
+                  selectedCrop={selectedCrop}
+                  onSelectCrop={handleSuggestionSelect}
+                  show={autoSuggestions.length > 0}
+                  variant="panel"
+                />
+
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Crop Type
+                  </label>
+                  <CropSelector selectedCrop={selectedCrop} onCropChange={setSelectedCrop} />
                 </div>
 
                 <div>
@@ -750,6 +876,10 @@ function Home() {
                   areaHectares={results.areaHectares}
                   warnings={results.warnings}
                   viabilityScore={results.viabilityScore}
+                  priceSource={results.priceSource}
+                  buyerName={results.buyerName}
+                  buyerDistanceKm={results.buyerDistanceKm}
+                  mandiTrendPct={results.mandiTrendPct}
                 />
                 {showResults && <EnvironmentalOutlook context={riskBriefContext} />}
               </>
@@ -758,21 +888,44 @@ function Home() {
             <CropSuggestions
               suggestions={cropSuggestions}
               season={currentSeason}
+              plantingDate={plantingDate}
+              lat={position?.lat}
+              selectedCrop={selectedCrop}
               onSelectCrop={handleSuggestionSelect}
               show={showSuggestions}
+              variant="results"
             />
+
+            {results && showResults && position && (
+              <MarketSignal
+                crop={selectedCrop}
+                harvestDate={results.harvestDate}
+                lat={position.lat}
+                priceSource={results.priceSource}
+                pricePerUnit={results.pricePerUnit}
+                referencePricePerUnit={results.referencePricePerUnit}
+                mandiTrendPct={results.mandiTrendPct}
+                mandiSeries={mandiSeries}
+                currencySymbol={locationInfo?.currencySymbol || '$'}
+                show
+              />
+            )}
           </div>
         </div>
+
+        <DockedAssistant
+          position={position}
+          cropContext={cropContext}
+          assistantContext={assistantContext}
+        />
       </main>
 
       <footer className="border-t border-border/30 py-6 px-6">
-        <div className="max-w-[1600px] mx-auto flex items-center justify-between">
+        <div className="max-w-[1800px] mx-auto flex items-center justify-between">
           <p className="text-xs text-muted-foreground">TerraLearn · Precision Agriculture &amp; the Saath network</p>
           <p className="text-xs text-muted-foreground/60">Educational tool · Data from Open-Meteo, ISRIC &amp; Esri</p>
         </div>
       </footer>
-
-      <DockedAssistant position={position} cropContext={cropContext} />
     </div>
   );
 }

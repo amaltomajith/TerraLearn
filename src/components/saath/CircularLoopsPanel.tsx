@@ -2,10 +2,29 @@ import { ArrowRight, Repeat } from 'lucide-react';
 import { useSaathIdentity } from './SaathIdentityProvider';
 import { useAsync } from '@/lib/saath/useAsync';
 import { getIfsLoops } from '@/lib/saath/queries';
-import { enterpriseEmoji, enterpriseLabel } from '@/lib/saath/ifsMatrix';
+import {
+  enterpriseEmoji,
+  mergeIfsMatches,
+  type MergedIfsLoopLeg,
+} from '@/lib/saath/ifsMatrix';
 import { formatDistance } from '@/lib/saath/distance';
 import { SectionCard, EmptyState } from './primitives';
 import { ConnectionRequestButton } from './ConnectionRequestButton';
+
+function ResourceChips({ legs }: { legs: MergedIfsLoopLeg[] }) {
+  return (
+    <span className="inline-flex flex-wrap gap-1">
+      {legs.map((l) => (
+        <span
+          key={l.resource}
+          className="font-mono text-xs bg-accent/10 text-accent rounded px-1.5 py-0.5"
+        >
+          {l.resource}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 export function CircularLoopsPanel() {
   const { activeFarmer, activeFarmerId } = useSaathIdentity();
@@ -15,6 +34,7 @@ export function CircularLoopsPanel() {
   );
 
   const hasEnterprises = (activeFarmer?.enterprises?.length ?? 0) > 0;
+  const loops = data ? mergeIfsMatches(data) : [];
 
   return (
     <SectionCard
@@ -32,67 +52,66 @@ export function CircularLoopsPanel() {
       )}
       {hasEnterprises && error && <p className="text-sm text-destructive">{error}</p>}
       {hasEnterprises && loading && !data && (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-14 rounded-xl bg-muted/40 animate-pulse" />
+            <div key={i} className="h-12 rounded-xl bg-muted/40 animate-pulse" />
           ))}
         </div>
       )}
-      {hasEnterprises && data && data.length === 0 && (
+      {hasEnterprises && data && loops.length === 0 && (
         <EmptyState>No circular matches within 20 km yet.</EmptyState>
       )}
-      {hasEnterprises && data && data.length > 0 && (
-        <ul className="space-y-2">
-          {data.map((m, i) => (
-            <li
-              key={`${m.their_farmer_id}-${m.resource}-${i}`}
-              className="rounded-xl border border-border/60 p-3"
-            >
-              <div className="flex items-center gap-2 text-sm">
-                {m.direction === 'i_supply' ? (
-                  <>
-                    <span className="font-medium">
-                      {enterpriseEmoji(m.my_enterprise)} your {enterpriseLabel(m.my_enterprise)}
-                    </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-accent" />
-                    <span className="font-mono text-xs bg-accent/10 text-accent rounded px-1.5 py-0.5">
-                      {m.resource}
-                    </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-accent" />
-                    <span className="font-medium">
-                      {enterpriseEmoji(m.their_enterprise)} {m.their_farmer_name}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="font-medium">
-                      {enterpriseEmoji(m.their_enterprise)} {m.their_farmer_name}
-                    </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-accent" />
-                    <span className="font-mono text-xs bg-accent/10 text-accent rounded px-1.5 py-0.5">
-                      {m.resource}
-                    </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-accent" />
-                    <span className="font-medium">
-                      your {enterpriseLabel(m.my_enterprise)}
-                    </span>
-                  </>
-                )}
-              </div>
-              <div className="mt-1.5 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">
-                  {m.their_village ? `${m.their_village} · ` : ''}
-                  {formatDistance(m.distance_m)}
-                  {m.has_active_listing ? ' · has an active listing' : ''}
-                </span>
-                <ConnectionRequestButton
-                  otherFarmerId={m.their_farmer_id}
-                  contextType="ifs_match"
-                  label="Reach out"
-                />
-              </div>
-            </li>
-          ))}
+      {hasEnterprises && loops.length > 0 && (
+        <ul className="space-y-1.5">
+          {loops.map((loop) => {
+            const enterpriseKey =
+              loop.supply[0]?.their_enterprise ?? loop.need[0]?.their_enterprise ?? '';
+            return (
+              <li
+                key={loop.their_farmer_id}
+                className="rounded-xl border border-border/60 p-2.5"
+              >
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <span>{enterpriseEmoji(enterpriseKey)}</span>
+                  <span>{loop.their_farmer_name}</span>
+                </div>
+
+                <div className="mt-1.5 space-y-1 text-sm">
+                  {loop.supply.length > 0 && (
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-xs text-muted-foreground shrink-0 pt-0.5">
+                        You send
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
+                      <ResourceChips legs={loop.supply} />
+                    </div>
+                  )}
+                  {loop.need.length > 0 && (
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-xs text-muted-foreground shrink-0 pt-0.5">
+                        You receive
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5 rotate-180" />
+                      <ResourceChips legs={loop.need} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-1.5 flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    {loop.their_village ? `${loop.their_village} · ` : ''}
+                    {formatDistance(loop.distance_m)}
+                    {loop.has_active_listing ? ' · has an active listing' : ''}
+                  </span>
+                  <ConnectionRequestButton
+                    otherFarmerId={loop.their_farmer_id}
+                    contextType="ifs_match"
+                    label="Reach out"
+                  />
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </SectionCard>

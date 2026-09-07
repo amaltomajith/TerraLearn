@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
-import { AskTerraLearn } from './AskTerraLearn';
+import { AskTerraLearn, type AssistantExtraContext } from './AskTerraLearn';
 
 interface CropContextData {
   crop: string;
@@ -13,16 +13,22 @@ interface CropContextData {
 const KEY = 'terralearn-assistant-open';
 
 /**
- * Persistent, collapsible AskTerraLearn panel. The pill stays anchored
- * bottom-right; the expanded panel opens on the LEFT so it never covers the
- * simulator results column on wide screens.
+ * Persistent, collapsible AskTerraLearn assistant.
+ *
+ * The pill is a fixed bottom-right control. The expanded panel is NOT a
+ * floating overlay — it renders in normal document flow at the end of the page
+ * content (right-aligned, under the pill's corner) so it reserves real layout
+ * space and can never cover the simulator results, suggestions or environmental
+ * outlook on any viewport width. Opening it scrolls the panel into view.
  */
 export function DockedAssistant({
   position,
   cropContext,
+  assistantContext,
 }: {
   position: { lat: number; lng: number } | null;
   cropContext?: CropContextData | null;
+  assistantContext?: AssistantExtraContext | null;
 }) {
   const [open, setOpen] = useState(() => {
     try {
@@ -31,6 +37,8 @@ export function DockedAssistant({
       return false;
     }
   });
+
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const toggle = () =>
     setOpen((o) => {
@@ -43,13 +51,24 @@ export function DockedAssistant({
       return next;
     });
 
+  useEffect(() => {
+    if (open) {
+      panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [open]);
+
   return (
     <>
       {open && (
         <div
-          className="fixed z-[900] left-4 right-4 bottom-[4.75rem] sm:left-6 sm:right-auto sm:bottom-4 sm:w-[380px] max-w-[calc(100vw-2rem)] rounded-2xl overflow-hidden shadow-2xl border border-border/60 animate-in fade-in slide-in-from-bottom-4 duration-200"
+          ref={panelRef}
+          className="mt-8 mb-16 w-full sm:w-[400px] sm:ml-auto scroll-mt-24 rounded-2xl overflow-hidden shadow-xl border border-border/60 animate-in fade-in slide-in-from-bottom-4 duration-200"
         >
-          <AskTerraLearn position={position} cropContext={cropContext} />
+          <AskTerraLearn
+            position={position}
+            cropContext={cropContext}
+            context={assistantContext}
+          />
         </div>
       )}
       <button

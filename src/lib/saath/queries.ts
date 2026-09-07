@@ -13,6 +13,7 @@ import type {
   ListingType,
   MapPointRow,
   Message,
+  NearbyDemandRow,
   NearbyListingRow,
   Offer,
   PaymentReliability,
@@ -164,6 +165,25 @@ export async function supplyMatchesForDemand(demandId: string): Promise<SupplyMa
 export async function demandMatchesForListing(listingId: string): Promise<DemandMatchRow[]> {
   const sb = requireSupabase();
   return unwrap(await sb.rpc('demand_matches_for_listing', { p_listing_id: listingId }));
+}
+
+/** Priced buyer-demand listings near a point for a produce category, nearest first.
+ *  Used by the crop-yield simulator (which has no listing id). */
+export async function nearbyDemandListings(
+  lat: number,
+  lng: number,
+  category: string,
+  radiusM = 100000,
+): Promise<NearbyDemandRow[]> {
+  const sb = requireSupabase();
+  return unwrap(
+    await sb.rpc('nearby_demand_listings', {
+      p_lat: lat,
+      p_lng: lng,
+      p_category: category,
+      p_radius_m: radiusM,
+    }),
+  );
 }
 
 // --- listings ---------------------------------------------------------

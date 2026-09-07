@@ -367,6 +367,7 @@ const soilCache = new Map<string, SoilData>();
 const locationCache = new Map<string, LocationInfo>();
 const airQualityCache = new Map<string, AirQualityData>();
 const climateTrendsCache = new Map<string, ClimateTrendsData>();
+const mandiCache = new Map<string, MandiPriceSeries | null>();
 
 function coordKey(lat: number, lng: number): string {
   return `${Math.round(lat * 100) / 100},${Math.round(lng * 100) / 100}`;
@@ -606,6 +607,118 @@ export async function fetchClimateTrends(lat: number, lng: number): Promise<Clim
   }
 }
 
+
+// ===================== AGMARKNET MANDI PRICES =====================
+// Real daily mandi (wholesale market) prices from data.gov.in — resource
+// 9ef84268-d588-465a-a308-a864a43d0070 ("Variety-wise Daily Market Prices").
+// The API key (VITE_AGMARKNET_API_KEY) is bundled into the client; a free key
+// is fine for this. The endpoint rate-limits and frequently returns no rows for
+// a given commodity, so every failure path returns null and callers fall back
+// to the static reference price.
+
+// CROP_DATABASE key -> Agmarknet commodity name.
+export const CROP_TO_AGMARKNET_COMMODITY: Record<string, string> = {
+  wheat: 'Wheat',
+  rice: 'Paddy(Dhan)(Common)',
+  corn: 'Maize',
+  soybeans: 'Soyabean',
+  barley: 'Barley',
+  cotton: 'Cotton',
+  potatoes: 'Potato',
+  tomatoes: 'Tomato',
+  onions: 'Onion',
+  sorghum: 'Jowar(Sorghum)',
+  sugarcane: 'Sugarcane',
+  cabbage: 'Cabbage',
+  carrots: 'Carrot',
+  spinach: 'Spinach',
+  peppers: 'Green Chilli',
+  cucumbers: 'Cucumbar(Kheera)',
+  grapes: 'Grapes',
+  lettuce: 'Lettuce',
+  strawberries: 'Strawberry',
+  oats: 'Oats',
+};
+
+export interface MandiPricePoint {
+  date: string; // ISO YYYY-MM-DD
+  modalPricePerTon: number; // INR / tonne
+  market: string;
+}
+
+export interface MandiPriceSeries {
+  commodity: string;
+  points: MandiPricePoint[]; // chronological
+  latestPerTon: number;
+  trailingAvgPerTon: number; // mean over the window, excluding the latest day
+  trendPct: number; // (latest - trailingAvg) / trailingAvg * 100, rounded
+}
+
+export async function fetchMandiPrices(
+  cropName: string,
+  opts?: { state?: string; days?: number },
+): Promise<MandiPriceSeries | null> {
+  const key = import.meta.env.VITE_AGMARKNET_API_KEY as string | undefined;
+  const commodity = CROP_TO_AGMARKNET_COMMODITY[cropName.toLowerCase()];
+  if (!key || !commodity) return null;
+
+  const cacheKey = `${commodity}|${opts?.state ?? ''}`;
+  if (mandiCache.has(cacheKey)) return mandiCache.get(cacheKey) ?? null;
+
+  try {
+    const params = new URLSearchParams({
+      'api-key': key,
+      format: 'json',
+      limit: '400',
+      'filters[commodity]': commodity,
+    });
+    if (opts?.state) params.set('filters[state]', opts.state);
+
+    const response = await fetch(
+      `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?${params.toString()}`,
+    );
+    if (!response.ok) throw new Error(`Agmarknet HTTP ${response.status}`);
+
+    const data = await response.json();
+    const rows: Array<Record<string, string>> = data.records ?? [];
+
+    const points = rows
+      .map((r) => ({
+        // arrival_date is "DD/MM/YYYY"
+        date: String(r.arrival_date ?? '').split('/').reverse().join('-'),
+        modalPricePerTon: Number(r.modal_price) * 10, // INR/quintal -> INR/tonne
+        market: r.market ?? '',
+      }))
+      .filter((p) => p.date.length === 10 && Number.isFinite(p.modalPricePerTon) && p.modalPricePerTon > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    if (points.length === 0) {
+      mandiCache.set(cacheKey, null);
+      return null;
+    }
+
+    const windowPoints = points.slice(-(opts?.days ?? 30));
+    const latest = windowPoints[windowPoints.length - 1].modalPricePerTon;
+    const prior = windowPoints.slice(0, -1);
+    const trailingAvg = prior.length
+      ? prior.reduce((sum, p) => sum + p.modalPricePerTon, 0) / prior.length
+      : latest;
+
+    const series: MandiPriceSeries = {
+      commodity,
+      points: windowPoints,
+      latestPerTon: Math.round(latest),
+      trailingAvgPerTon: Math.round(trailingAvg),
+      trendPct: trailingAvg ? Math.round(((latest - trailingAvg) / trailingAvg) * 100) : 0,
+    };
+    mandiCache.set(cacheKey, series);
+    return series;
+  } catch (error) {
+    console.warn('Agmarknet fetch failed, falling back to reference price:', error);
+    mandiCache.set(cacheKey, null);
+    return null;
+  }
+}
 
 // Fetch real soil data from ISRIC SoilGrids API (free, no API key required)
 export async function fetchSoilData(lat: number, lng: number): Promise<SoilData> {
@@ -849,6 +962,15 @@ export interface SimulationResult {
   areaHectares: number;
   warnings: string[];
   viabilityScore: number; // 0-100
+  // Where pricePerUnit came from:
+  //   'buyer'     — a real nearby demand listing (Saath)
+  //   'agmarknet' — the latest mandi modal price for this commodity
+  //   'reference' — the static CROP_DATABASE basePrice + seasonality/random model
+  priceSource: 'buyer' | 'agmarknet' | 'reference';
+  referencePricePerUnit: number; // the non-buyer reference (mandi or static), local currency / ton
+  mandiTrendPct?: number; // recent mandi trend, when a mandi price was used
+  buyerName?: string;
+  buyerDistanceKm?: number;
 }
 
 export function calculateYield(
@@ -858,7 +980,11 @@ export function calculateYield(
   soil: SoilData,
   lat: number,
   exchangeRate: number = 1,
-  areaHectares: number = 1
+  areaHectares: number = 1,
+  // Optional market signals, both in LOCAL currency per tonne. Supplied by the
+  // caller only for India pins (where exchangeRate is the INR rate).
+  marketOverride?: { pricePerTon: number; buyerName: string; distanceKm: number },
+  mandiRef?: { pricePerTon: number; trendPct: number },
 ): SimulationResult {
   const cropKey = crop.toLowerCase();
   const cropInfo = CROP_DATABASE[cropKey];
@@ -1026,12 +1152,32 @@ export function calculateYield(
   harvestDate.setDate(harvestDate.getDate() + Math.min(adjustedGrowingDays, growingDays * 3));
 
   // ========== PRICING ==========
-  const harvestMonth = harvestDate.getMonth();
-  // Harvest-time supply glut reduces price, off-season premium
-  const harvestSeasonality = harvestMonth >= 8 && harvestMonth <= 10 ? 0.82 : 1.08;
-  const priceVariation = 0.93 + Math.random() * 0.14;
-  const finalPriceUSD = Math.round(basePrice * priceVariation * harvestSeasonality);
-  const finalPrice = Math.round(finalPriceUSD * exchangeRate);
+  // Fully deterministic — no randomisation on any tier.
+  // Reference price: a live mandi modal price when available, else the static
+  // CROP_DATABASE basePrice converted to local currency.
+  let referencePricePerUnit: number;
+  let mandiTrendPct: number | undefined;
+  if (mandiRef && mandiRef.pricePerTon > 0) {
+    referencePricePerUnit = Math.round(mandiRef.pricePerTon);
+    mandiTrendPct = mandiRef.trendPct;
+  } else {
+    referencePricePerUnit = Math.round(basePrice * exchangeRate);
+  }
+
+  // Actual price used: a real nearby buyer beats the reference; otherwise the
+  // reference price itself (live mandi price, or the static base price).
+  let finalPrice: number;
+  let priceSource: SimulationResult['priceSource'];
+  if (marketOverride && marketOverride.pricePerTon > 0) {
+    finalPrice = Math.round(marketOverride.pricePerTon);
+    priceSource = 'buyer';
+  } else if (mandiRef && mandiRef.pricePerTon > 0) {
+    finalPrice = referencePricePerUnit;
+    priceSource = 'agmarknet';
+  } else {
+    finalPrice = referencePricePerUnit;
+    priceSource = 'reference';
+  }
 
   // ========== COSTS (more realistic) ==========
   const grossRevenue = Math.round(finalYield * finalPrice);
@@ -1057,5 +1203,10 @@ export function calculateYield(
     areaHectares,
     warnings,
     viabilityScore,
+    priceSource,
+    referencePricePerUnit,
+    mandiTrendPct,
+    buyerName: marketOverride?.buyerName,
+    buyerDistanceKm: marketOverride?.distanceKm,
   };
 }

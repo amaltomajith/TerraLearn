@@ -97,6 +97,9 @@ accounts + their `7777…`-prefixed primary farms on a demo reset.
 - **Still to do:** set `VITE_API_BASE_URL` on `tozc` to the Render backend URL, or the
   AI panels (`AskTerraLearn`, `EnvironmentalOutlook`) will fail. The rest of the app works
   without it.
+- **Optional:** set `VITE_AGMARKNET_API_KEY` on `tozc` (free key from a data.gov.in account,
+  public/bundled) so the `MarketSignal` panel + the live mandi reference price show real data.
+  Without it those degrade to a harvest-seasonality heuristic — no error.
 - Vite bakes env vars at **build time** — after changing any, you must **redeploy**.
 
 ---
