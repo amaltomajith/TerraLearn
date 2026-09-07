@@ -46,6 +46,4 @@ core
 scripts/.artifacts/
 .env.seed-accounts.local
 
-.github/
-
 **/tempobook/**

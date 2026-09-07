@@ -1,0 +1,32 @@
+name: Keep Render backend awake
+
+# Render's free web-service tier spins the backend down after ~15 min idle, and
+# a cold start then takes ~1 min (torch import + RAG index). This pings the
+# lightweight /health endpoint every 10 min so the service stays warm.
+#
+# Set the repo variable RENDER_BACKEND_URL (Settings -> Secrets and variables ->
+# Actions -> Variables) to the live base URL, e.g.
+#   https://terralearn-backend.onrender.com
+# The fallback below keeps the job working if the variable is unset.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Curl /health
+        run: |
+          BASE="${{ vars.RENDER_BACKEND_URL || 'https://terralearn-backend.onrender.com' }}"
+          echo "Pinging ${BASE}/health"
+          code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 150 --retry 2 --retry-delay 20 "${BASE}/health" || true)
+          echo "HTTP ${code}"
+          cat /tmp/body || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::warning::Health check did not return 200 (got ${code:-none})"
+          fi

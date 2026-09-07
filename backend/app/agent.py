@@ -156,6 +156,16 @@ def run_agent(user_input: str) -> str:
                 or "Failed to call a function" in err_str
                 or ("400" in err_str and not is_429)
             )
+            # A decommissioned / unavailable primary model (e.g. Groq retiring a
+            # Llama snapshot) comes back as a 404 model_not_found. Treat it like a
+            # connection failure: fail over to OpenRouter instead of surfacing the
+            # raw provider error to the farmer.
+            is_model_not_found = (
+                "model_not_found" in err_str
+                or "model_decommissioned" in err_str
+                or "404" in err_str
+                or "does not exist or you do not have access" in err_str.lower()
+            )
 
             # 1. Handle 429 Rate Limit with single retry on primary
             if is_429:
@@ -178,10 +188,12 @@ def run_agent(user_input: str) -> str:
                 logger.error("Groq 429 rate limit persisted and no fallback API key configured.")
                 return "The assistant is briefly rate-limited. Please wait a few seconds and try your question again."
 
-            # 2. Handle Connection / Timeout errors on primary
-            if is_conn_error and not is_tool_use_failed:
+            # 2. Handle Connection / Timeout errors, or a decommissioned/unavailable
+            #    primary model (404 model_not_found), on primary
+            if (is_conn_error or is_model_not_found) and not is_tool_use_failed:
                 if fallback_api_key:
-                    logger.warning("Groq connection/timeout error. Attempting fallback to OpenRouter...")
+                    reason = "model-not-found" if is_model_not_found else "connection/timeout"
+                    logger.warning("Groq %s error. Attempting fallback to OpenRouter...", reason)
                     fallback_result = _try_fallback(
                         fallback_api_key, fallback_base_url, fallback_model, tools, user_input, http_client
                     )
