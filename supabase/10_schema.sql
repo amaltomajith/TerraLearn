@@ -186,3 +186,30 @@ create table if not exists ifs_matrix (
   resource   text not null,
   primary key (enterprise, direction, resource)
 );
+
+-- ---------------------------------------------------------------------------
+-- assistant_threads / assistant_messages  (AI assistant conversation memory)
+--   Added in migrations/20260907_03_assistant_memory.sql. Frontend-only access
+--   via the Clerk-authed client; the FastAPI backend stays stateless.
+-- ---------------------------------------------------------------------------
+create table if not exists assistant_threads (
+  id              uuid primary key default gen_random_uuid(),
+  farmer_id       uuid not null references farmers(id) on delete cascade,
+  title           text,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  last_message_at timestamptz not null default now()
+);
+create index if not exists assistant_threads_farmer_idx
+  on assistant_threads (farmer_id, last_message_at desc);
+
+create table if not exists assistant_messages (
+  id         uuid primary key default gen_random_uuid(),
+  thread_id  uuid not null references assistant_threads(id) on delete cascade,
+  role       text not null check (role in ('user','assistant','system')),
+  content    text not null,
+  meta       jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists assistant_messages_thread_idx
+  on assistant_messages (thread_id, created_at);

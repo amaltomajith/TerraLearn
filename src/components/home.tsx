@@ -5,8 +5,8 @@ import { Navigation } from './Navigation';
 import NavAuthControl from './saath/NavAuthControl';
 import { MapView, type IfsConnection } from './MapView';
 import { FarmSwitcher } from './FarmSwitcher';
-import { DockedAssistant } from './DockedAssistant';
-import type { AssistantExtraContext } from './AskTerraLearn';
+import { useAssistantPageContext } from '@/lib/assistant/useAssistantPageContext';
+import type { AssistantExtraContext } from '@/lib/assistant/types';
 import { useIdentity } from '@/lib/identity/identity';
 import { getMapPoints, getIfsLoops, nearbyDemandListings } from '@/lib/saath/queries';
 import type { MapPointRow, IfsMatchRow, NearbyDemandRow } from '@/lib/saath/types';
@@ -448,6 +448,9 @@ function Home() {
       profit: results.profit,
     };
   }, [results, selectedCrop, plantingDate, position, showResults]);
+
+  // Feed the current pin / crop result / environment snapshot to the global assistant.
+  useAssistantPageContext({ position, cropContext, assistantContext });
 
   const getAqiSeverityBadge = (type: 'us_aqi' | 'pm2_5' | 'pm10' | 'ozone', value: number) => {
     let label = 'Good';
@@ -920,11 +923,6 @@ function Home() {
           </div>
         </div>
 
-        <DockedAssistant
-          position={position}
-          cropContext={cropContext}
-          assistantContext={assistantContext}
-        />
       </main>
 
       <footer className="border-t border-border/30 py-6 px-6">
