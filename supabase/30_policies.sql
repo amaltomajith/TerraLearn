@@ -229,3 +229,29 @@ drop policy if exists ifs_read on ifs_matrix;
 
 create policy ifs_read on ifs_matrix
   for select using (true);
+
+-- ===========================================================================
+-- assistant_threads / assistant_messages  (AI assistant memory)
+--   Added in migrations/20260907_03_assistant_memory.sql. Private to the owner;
+--   messages are gated through their parent thread.
+-- ===========================================================================
+alter table assistant_threads  enable row level security;
+alter table assistant_messages enable row level security;
+
+drop policy if exists at_rw on assistant_threads;
+create policy at_rw on assistant_threads
+  for all
+  using      (farmer_id = current_farmer_id())
+  with check (farmer_id = current_farmer_id());
+
+drop policy if exists am_rw on assistant_messages;
+create policy am_rw on assistant_messages
+  for all
+  using (exists (
+    select 1 from assistant_threads t
+    where t.id = assistant_messages.thread_id and t.farmer_id = current_farmer_id()
+  ))
+  with check (exists (
+    select 1 from assistant_threads t
+    where t.id = assistant_messages.thread_id and t.farmer_id = current_farmer_id()
+  ));

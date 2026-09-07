@@ -92,16 +92,20 @@ def main():
         checker=lambda a: len(a) > 20,
     ))
 
-    # (b) Knowledge-base question — expect cited source
-    def has_citation(answer: str) -> bool:
+    # (b) Knowledge-base question — expect a grounded fact from the RAG docs.
+    # (Answers are deliberately concise now, so we check for the figure or a
+    #  named source rather than length.)
+    def kb_grounded(answer: str) -> bool:
         lower = answer.lower()
-        citation_markers = [".txt", ".md", "according to", "source:", "from the", "based on"]
-        return any(m in lower for m in citation_markers) or len(answer) > 50
+        names_topic = "pm2.5" in lower or "pm 2.5" in lower or "µg" in lower or "ug/m" in lower or "who" in lower
+        has_figure = any(n in answer for n in ("5", "10", "15", "25"))
+        cites_source = any(m in lower for m in (".txt", "according to", "guide", "guideline", "source:"))
+        return (names_topic and has_figure) or cites_source
 
     results.append(run_test(
-        "b) Knowledge-base / RAG question (with citation check)",
+        "b) Knowledge-base / RAG question (grounded-fact check)",
         "What is the WHO safe PM2.5 level?",
-        checker=has_citation,
+        checker=kb_grounded,
     ))
 
     # (c) Same KB question 3× back-to-back — checking for tool_use_failed flakiness

@@ -58,6 +58,19 @@ farm's location" / "save pin as a new farm" / "set as primary".
 branches, no persona switcher / adopt-persona screen, no `personas.ts`, no `DemoDataBadge` /
 `ProvenanceNote`, no `farmers.is_seed` column.
 
+**Global AI assistant** (`src/lib/assistant/` + `src/components/assistant/`, PR1 of a
+3-phase plan): a floating "Ask TerraLearn" button on **every** authenticated page (mounted
+once in `RootGate` above `<Routes>`). Replaces the old `DockedAssistant` / `AskTerraLearn`
+(deleted). Desktop = anchored floating panel (`position: fixed`, never shifts page content);
+mobile = bottom sheet. Conversation memory lives in Supabase (`assistant_threads` /
+`assistant_messages`, RLS-scoped to the farmer, migration `20260907_03`); the panel restores
+the latest thread on load and survives navigation. Backend stays stateless — the client
+sends the last ~10 turns + light identity each `/api/ask` call. Answers are now short,
+plain-language, and in the farmer's `language` (`build_system_prompt` in `agent.py`).
+`/api/ask` is non-blocking (`asyncio.to_thread`) and the LangGraph agent is cached
+module-level. **Still to come:** PR2 = Saath-awareness (inbox / nearby farmers / listings as
+context); PR3 = draft-and-confirm messaging to other farmers.
+
 ---
 
 ## Infrastructure

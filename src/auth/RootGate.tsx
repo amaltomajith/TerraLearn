@@ -4,6 +4,8 @@ import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react';
 import Home from '@/components/home';
 import { BrandSplash } from '@/components/BrandSplash';
 import { IdentityProvider } from '@/lib/identity/identity';
+import { AssistantProvider } from '@/lib/assistant/AssistantProvider';
+import { GlobalAssistant } from '@/components/assistant/GlobalAssistant';
 import { RequireOnboarding } from './RequireOnboarding';
 
 const SaathApp = lazy(() => import('@/components/saath/SaathApp'));
@@ -22,18 +24,21 @@ export function RootGate() {
       <SignedIn>
         <IdentityProvider>
           <RequireOnboarding>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route
-                path="/saath/*"
-                element={
-                  <Suspense fallback={<BrandSplash label="Loading Saath…" />}>
-                    <SaathApp />
-                  </Suspense>
-                }
-              />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <AssistantProvider>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route
+                  path="/saath/*"
+                  element={
+                    <Suspense fallback={<BrandSplash label="Loading Saath…" />}>
+                      <SaathApp />
+                    </Suspense>
+                  }
+                />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+              <GlobalAssistant />
+            </AssistantProvider>
           </RequireOnboarding>
         </IdentityProvider>
       </SignedIn>

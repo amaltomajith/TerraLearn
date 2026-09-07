@@ -6,7 +6,7 @@ import httpx
 from pathlib import Path
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.prebuilt import create_react_agent
 from app.tools import get_climate_aqi_data, get_environmental_knowledge
 
@@ -21,22 +21,63 @@ if env_local_path.exists():
     load_dotenv(env_local_path, override=True)
 load_dotenv(env_path, override=False)
 
-SYSTEM_PROMPT = (
-    "You are TerraLearn's precision agriculture environmental assistant for farmers.\n"
-    "Your goal is to answer natural-language questions about climate, weather trends, "
-    "air quality, and crop viability for a specific location.\n\n"
-    "Available tools:\n"
-    "1. get_climate_aqi_data(lat, lng): Use for real-time weather, current AQI, "
-    "temperature trends, or rainfall history at specific coordinates.\n"
-    "2. get_environmental_knowledge(query): Use for questions about health standards "
-    "(WHO, CPCB), policy (NCAP), pollutant effects on crops (ozone, PM, heat stress), "
-    "stubble burning, or farm management guidelines. You MUST cite source files "
-    "(e.g., 'According to [source_file]...') when using this tool.\n\n"
-    "Instructions:\n"
-    "- Select the appropriate tool for the question.\n"
-    "- Keep answers concise, practical, and farmer-friendly.\n"
-    "- If pre-calculated crop yield context is provided in the user prompt, include it."
-)
+
+# ---------------------------------------------------------------------------
+# System prompt
+# ---------------------------------------------------------------------------
+
+_LANG_NAMES = {
+    "kn": "Kannada",
+    "hi": "Hindi",
+    "en": "English",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "mr": "Marathi",
+    "ml": "Malayalam",
+    "bn": "Bengali",
+    "pa": "Punjabi",
+    "gu": "Gujarati",
+}
+
+
+def build_system_prompt(language=None, name=None, village=None, enterprises=None) -> str:
+    """Farmer-facing system prompt. Language defaults to Kannada (the Saath default)."""
+    lang = _LANG_NAMES.get((language or "").strip().lower(), "English")
+
+    who = []
+    if name:
+        who.append(f"The farmer's name is {name}.")
+    if village:
+        who.append(f"Their village is {village}.")
+    if enterprises:
+        who.append("They farm: " + ", ".join(enterprises) + ".")
+    who_line = (" " + " ".join(who)) if who else ""
+
+    return (
+        f"You are TerraLearn's assistant for small farmers in India.{who_line}\n\n"
+        f"ALWAYS reply in {lang}. Keep names, numbers and place names as they are; "
+        f"never switch language in the middle of an answer.\n\n"
+        "HOW TO ANSWER:\n"
+        "- Put the answer in the very first sentence. No preamble like 'Based on the data'.\n"
+        "- Stay under 60 words unless the farmer asks you to explain in detail.\n"
+        "- Use simple everyday words and short sentences (class-6 reading level).\n"
+        "- Mention only the one or two numbers that matter for the question. Never list every metric.\n"
+        "- Never invent a number. If a value is not in the context and no tool gives it, say you don't have it.\n"
+        "- If you are unsure, say so briefly and say what would help.\n\n"
+        "CONTEXT & TOOLS:\n"
+        "- The user prompt already carries the current pin's weather, soil, air quality and "
+        "market numbers. Answer from those first.\n"
+        "- Only call get_climate_aqi_data when the farmer asks about multi-year history or live "
+        "readings that are not already in the prompt.\n"
+        "- Call get_environmental_knowledge for questions about safe limits, pollution effects on "
+        "crops, government schemes, or health thresholds. Name the source in plain words "
+        "(e.g. 'the WHO guide says') — a formal citation is optional.\n"
+        "- If a crop-simulation result is in the prompt, use its numbers."
+    )
+
+
+# Module default (used by /api/risk-brief and as the fallback).
+SYSTEM_PROMPT = build_system_prompt()
 
 
 def log_provider_config():
@@ -58,40 +99,96 @@ def log_provider_config():
 log_provider_config()
 
 
-def _try_fallback(
-    api_key: str,
-    base_url: str,
-    model_name: str,
-    tools: list,
-    user_input: str,
-    http_client: httpx.Client,
-) -> Optional[str]:
-    """Attempt execution via fallback provider (OpenRouter)."""
-    try:
-        fallback_llm = ChatOpenAI(
+# ---------------------------------------------------------------------------
+# Cached LLM / agent — rebuilt only when the provider config changes, so a warm
+# request skips ChatOpenAI + create_react_agent + httpx.Client construction.
+# ---------------------------------------------------------------------------
+
+_TOOLS = [get_climate_aqi_data, get_environmental_knowledge]
+_HTTP_CLIENT: Optional[httpx.Client] = None
+_LLM_CACHE: dict = {}
+_AGENT_CACHE: dict = {}
+
+
+def _http_client() -> httpx.Client:
+    global _HTTP_CLIENT
+    if _HTTP_CLIENT is None:
+        _HTTP_CLIENT = httpx.Client(verify=False)
+    return _HTTP_CLIENT
+
+
+def _get_llm(api_key: str, base_url: str, model: str) -> ChatOpenAI:
+    key = (api_key, base_url, model)
+    if key not in _LLM_CACHE:
+        _LLM_CACHE[key] = ChatOpenAI(
             api_key=api_key,
             base_url=base_url,
-            model=model_name,
+            model=model,
             temperature=0.3,
-            http_client=http_client,
+            http_client=_http_client(),
         )
-        fallback_agent = create_react_agent(fallback_llm, tools, prompt=SYSTEM_PROMPT)
-        result = fallback_agent.invoke({"messages": [HumanMessage(content=user_input)]})
-        messages = result.get("messages", [])
+    return _LLM_CACHE[key]
 
-        for msg in reversed(messages):
-            content = getattr(msg, "content", None)
-            tool_calls = getattr(msg, "tool_calls", None)
-            if content and not tool_calls:
-                logger.info("served by: openrouter_fallback")
-                return str(content)
+
+def _get_agent(api_key: str, base_url: str, model: str):
+    key = (api_key, base_url, model)
+    if key not in _AGENT_CACHE:
+        # No prompt= — the SystemMessage is prepended per request so the reply
+        # language can change from one farmer to the next.
+        _AGENT_CACHE[key] = create_react_agent(_get_llm(api_key, base_url, model), _TOOLS)
+    return _AGENT_CACHE[key]
+
+
+def _to_messages(user_input: str, history, system_prompt: Optional[str]) -> list:
+    """[SystemMessage, *prior turns, HumanMessage(current)]."""
+    msgs: list = [SystemMessage(content=system_prompt or SYSTEM_PROMPT)]
+    for turn in (history or []):
+        if not isinstance(turn, dict):
+            continue
+        content = (turn.get("content") or "").strip()
+        if not content:
+            continue
+        if turn.get("role") == "assistant":
+            msgs.append(AIMessage(content=content))
+        else:
+            msgs.append(HumanMessage(content=content))
+    msgs.append(HumanMessage(content=user_input))
+    return msgs
+
+
+def _last_answer(messages: list) -> Optional[str]:
+    """The last assistant (AI) message with real text and no pending tool call.
+    Never returns the echoed system/human/tool messages we passed in."""
+    for msg in reversed(messages):
+        if getattr(msg, "type", None) != "ai":
+            continue
+        content = getattr(msg, "content", None)
+        tool_calls = getattr(msg, "tool_calls", None)
+        if content and not tool_calls:
+            return str(content).strip()
+    return None
+
+
+def _try_fallback(api_key: str, base_url: str, model_name: str, msgs: list) -> Optional[str]:
+    """Attempt execution via the fallback provider (OpenRouter)."""
+    try:
+        fallback_agent = _get_agent(api_key, base_url, model_name)
+        result = fallback_agent.invoke({"messages": msgs})
+        answer = _last_answer(result.get("messages", []))
+        if answer:
+            logger.info("served by: openrouter_fallback")
+            return answer
     except Exception as fb_err:
         logger.error("Fallback provider (OpenRouter) invocation failed: %s", fb_err)
     return None
 
 
-def run_agent(user_input: str) -> str:
-    """Run a LangGraph ReAct agent with primary (Groq) and fallback (OpenRouter) providers."""
+def run_agent(user_input: str, history=None, system_prompt: Optional[str] = None) -> str:
+    """Run a LangGraph ReAct agent with primary (Groq) and fallback (OpenRouter) providers.
+
+    `history` is a list of {"role": "user"|"assistant", "content": str} prior turns
+    (the backend stays stateless — the client sends recent history each call).
+    """
     # Ensure fresh env values on each request
     if env_local_path.exists():
         load_dotenv(env_local_path, override=True)
@@ -110,18 +207,8 @@ def run_agent(user_input: str) -> str:
     if not api_key:
         return "API key is not configured. Please set OPENAI_API_KEY in backend/.env."
 
-    http_client = httpx.Client(verify=False)
-
-    llm = ChatOpenAI(
-        api_key=api_key,
-        base_url=base_url,
-        model=model_name,
-        temperature=0.3,
-        http_client=http_client,
-    )
-
-    tools = [get_climate_aqi_data, get_environmental_knowledge]
-    agent = create_react_agent(llm, tools, prompt=SYSTEM_PROMPT)
+    msgs = _to_messages(user_input, history, system_prompt)
+    agent = _get_agent(api_key, base_url, model_name)
 
     has_retried_429 = False
     max_tool_attempts = 2
@@ -129,17 +216,11 @@ def run_agent(user_input: str) -> str:
     tool_attempt = 1
     while tool_attempt <= max_tool_attempts:
         try:
-            result = agent.invoke({"messages": [HumanMessage(content=user_input)]})
-            messages = result.get("messages", [])
-
-            # Extract the last non-tool AI message
-            for msg in reversed(messages):
-                content = getattr(msg, "content", None)
-                tool_calls = getattr(msg, "tool_calls", None)
-                if content and not tool_calls:
-                    logger.info("served by: groq")
-                    return str(content)
-
+            result = agent.invoke({"messages": msgs})
+            answer = _last_answer(result.get("messages", []))
+            if answer:
+                logger.info("served by: groq")
+                return answer
             return "The assistant did not produce a response. Please try rephrasing your question."
 
         except Exception as e:
@@ -179,7 +260,7 @@ def run_agent(user_input: str) -> str:
                 if fallback_api_key:
                     logger.warning("Groq 429 rate limit persisted after retry. Attempting fallback to OpenRouter...")
                     fallback_result = _try_fallback(
-                        fallback_api_key, fallback_base_url, fallback_model, tools, user_input, http_client
+                        fallback_api_key, fallback_base_url, fallback_model, msgs
                     )
                     if fallback_result:
                         return fallback_result
@@ -195,7 +276,7 @@ def run_agent(user_input: str) -> str:
                     reason = "model-not-found" if is_model_not_found else "connection/timeout"
                     logger.warning("Groq %s error. Attempting fallback to OpenRouter...", reason)
                     fallback_result = _try_fallback(
-                        fallback_api_key, fallback_base_url, fallback_model, tools, user_input, http_client
+                        fallback_api_key, fallback_base_url, fallback_model, msgs
                     )
                     if fallback_result:
                         return fallback_result
@@ -216,9 +297,7 @@ def run_agent(user_input: str) -> str:
                         max_tool_attempts,
                     )
                     try:
-                        fallback_response = llm.invoke(
-                            [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=user_input)]
-                        )
+                        fallback_response = _get_llm(api_key, base_url, model_name).invoke(msgs)
                         fallback_text = str(fallback_response.content).strip()
                         logger.info("served by: groq")
                         return (
