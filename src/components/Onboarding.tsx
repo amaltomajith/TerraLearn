@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { toast } from 'sonner';
 import { Cloud, Leaf, Loader2, Sparkles, TestTube2, X, Zap, type LucideIcon } from 'lucide-react';
@@ -17,6 +17,8 @@ import {
   updateFarmDetails,
   getMapPoints,
 } from '@/lib/saath/queries';
+import { redeemInvite } from '@/lib/farm/queries';
+
 import { haversineMeters } from '@/lib/saath/distance';
 import { suggestCropsWithCircular, CROP_TO_ENTERPRISE } from '@/lib/cropEnterprise';
 import { useIdentity } from '@/lib/identity/identity';
@@ -101,6 +103,7 @@ interface OnboardingProps {
 export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
   const isAddFarm = mode === 'add-farm';
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useUser();
   const { refresh, farms, ownFarmer } = useIdentity();
 
@@ -116,6 +119,9 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
   const [pos, setPos] = useState<{ lat: number; lng: number } | null>(MANDYA);
   const [geo, setGeo] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [inviteCode, setInviteCode] = useState(
+    () => (searchParams.get('invite') ?? '').toUpperCase().replace(/[^A-Z0-9]/g, ''),
+  );
   const [nearby, setNearby] = useState<MapPointRow[]>([]);
   const [locInfo, setLocInfo] = useState<LocationInfo | null>(null);
 
@@ -355,6 +361,18 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
         primaryCrop: isFarmer ? crops[0] ?? null : null,
       });
       toast.success('Welcome to TerraLearn');
+      // Redeem invite code if the farmer entered one
+      const code = inviteCode.trim().toUpperCase();
+      if (code) {
+        try {
+          await redeemInvite(code);
+          toast.success(`Joined the farm with invite code ${code}`);
+        } catch {
+          toast.warning(
+            `Invite code "${code}" is invalid or already used — you can join a farm later from the Team tab.`,
+          );
+        }
+      }
       await refresh();
     } catch (e) {
       toast.error(`Could not save your profile: ${(e as Error).message}`);
@@ -791,6 +809,26 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
                     ))}
                   </select>
                 </label>
+              </div>
+
+              {/* Invite code — optional, spans full width below the 2-col grid */}
+              <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 space-y-1.5">
+                <label className="text-sm block">
+                  <span className="font-medium text-foreground">Have an invite code?</span>
+                  <span className="ml-2 text-xs text-muted-foreground">Optional — if a farm owner gave you one</span>
+                  <input
+                    className={`${field} mt-1.5 font-mono tracking-widest uppercase`}
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                    placeholder="e.g. A3F9C2"
+                    maxLength={8}
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                </label>
+                <p className="text-[11px] text-muted-foreground">
+                  Entering a valid code joins you as a member of that farm immediately after sign-up.
+                </p>
               </div>
 
               <div className="flex gap-3">
