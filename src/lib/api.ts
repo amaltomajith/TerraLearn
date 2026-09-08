@@ -4,6 +4,7 @@ export interface ClimateData {
   temperature: number; // Celsius
   precipitation: number; // mm
   humidity: number; // %
+  windSpeed?: number; // km/h — only set on the current-weather branch (undefined for growing-season normals)
 }
 
 export interface AirQualityData {
@@ -39,14 +40,16 @@ export interface ClimateTrendsData {
 
 export interface SoilData {
   pH: number;
-  nitrogen: number; // ppm
-  phosphorus: number; // ppm
-  potassium: number; // ppm
+  nitrogen: number; // total soil N (not plant-available) — SoilGrids `nitrogen` cg/kg ÷ 10
+  phosphorus: number; // derived: SoilGrids organic carbon ÷ 20 (SoilGrids has no P layer)
+  potassium: number; // estimated: 100 + nitrogen*1.5 + phosphorus*2 (SoilGrids has no K layer)
   // Where the values came from:
-  //   'isric'     — a real ISRIC SoilGrids measurement for this point
+  //   'isric'     — an ISRIC SoilGrids ~250 m regional interpolation for this point
+  //                 (a model surface, not a field measurement of this plot)
   //   'estimated' — SoilGrids was unavailable; a deterministic latitude-band
   //                 heuristic seeded on the coordinate (same pin → same values)
   source: 'isric' | 'estimated';
+  fetchedAt: string; // ISO timestamp this reading was retrieved
 }
 
 export interface LocationInfo {
@@ -366,22 +369,66 @@ const CURRENCY_MAP: Record<string, { symbol: string; code: string; rate: number 
 };
 
 // ===== IN-MEMORY CACHE =====
-// Cache key: "lat,lng" rounded to 2 decimal places (~1km precision)
-const climateCache = new Map<string, ClimateData>();
-const soilCache = new Map<string, SoilData>();
-const locationCache = new Map<string, LocationInfo>();
-const airQualityCache = new Map<string, AirQualityData>();
-const climateTrendsCache = new Map<string, ClimateTrendsData>();
-const mandiCache = new Map<string, MandiPriceSeries | null>();
+// Cache key: "lat,lng" rounded to 2 decimal places (~1km precision).
+//
+// Each entry carries the time it was stored so live-ish data (weather, AQI) can
+// expire while slow-moving data (soil, 5-year trends, currency) stays put for
+// the session. `{ force: true }` on a fetcher bypasses a live entry for an
+// explicit refresh.
+interface CacheEntry<T> {
+  v: T;
+  at: number; // Date.now() when stored
+}
+
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+export const CACHE_TTL = {
+  airQuality: 15 * MIN,
+  climate: 15 * MIN,
+  forecast: HOUR,
+  soil: 24 * HOUR,
+  climateTrends: Infinity, // 5-year archive — does not move within a session
+  location: Infinity, // currency / country for a coordinate
+  mandi: Infinity, // includes negative caching (no rows for a commodity)
+} as const;
+
+function cacheGet<T>(
+  map: Map<string, CacheEntry<T>>,
+  key: string,
+  ttl: number,
+  force?: boolean,
+): T | undefined {
+  if (force) return undefined;
+  const hit = map.get(key);
+  if (!hit) return undefined;
+  if (ttl !== Infinity && Date.now() - hit.at > ttl) return undefined;
+  return hit.v;
+}
+
+function cacheSet<T>(map: Map<string, CacheEntry<T>>, key: string, v: T): void {
+  map.set(key, { v, at: Date.now() });
+}
+
+const climateCache = new Map<string, CacheEntry<ClimateData>>();
+const soilCache = new Map<string, CacheEntry<SoilData>>();
+const locationCache = new Map<string, CacheEntry<LocationInfo>>();
+const airQualityCache = new Map<string, CacheEntry<AirQualityData>>();
+const climateTrendsCache = new Map<string, CacheEntry<ClimateTrendsData>>();
+const mandiCache = new Map<string, CacheEntry<MandiPriceSeries | null>>();
+
+export interface FetchOpts {
+  /** Skip a still-valid live cache entry and re-fetch. */
+  force?: boolean;
+}
 
 function coordKey(lat: number, lng: number): string {
   return `${Math.round(lat * 100) / 100},${Math.round(lng * 100) / 100}`;
 }
 
 // Fetch location info using reverse geocoding (free, no API key)
-export async function fetchLocationInfo(lat: number, lng: number): Promise<LocationInfo> {
+export async function fetchLocationInfo(lat: number, lng: number, opts?: FetchOpts): Promise<LocationInfo> {
   const key = coordKey(lat, lng);
-  const cached = locationCache.get(key);
+  const cached = cacheGet(locationCache, key, CACHE_TTL.location, opts?.force);
   if (cached) return cached;
 
   try {
@@ -411,7 +458,7 @@ export async function fetchLocationInfo(lat: number, lng: number): Promise<Locat
       currencyCode: currency.code,
       exchangeRate: currency.rate,
     };
-    locationCache.set(key, result);
+    cacheSet(locationCache, key, result);
     return result;
   } catch (error) {
     console.error('Location info error:', error);
@@ -426,9 +473,9 @@ export async function fetchLocationInfo(lat: number, lng: number): Promise<Locat
 }
 
 // Fetch climate data from Open-Meteo with monthly averages for the growing period
-export async function fetchClimateData(lat: number, lng: number, plantingDate?: Date, growingDays?: number): Promise<ClimateData> {
+export async function fetchClimateData(lat: number, lng: number, plantingDate?: Date, growingDays?: number, opts?: FetchOpts): Promise<ClimateData> {
   const key = coordKey(lat, lng);
-  const cached = climateCache.get(key);
+  const cached = cacheGet(climateCache, key, CACHE_TTL.climate, opts?.force);
   if (cached) return cached;
 
   try {
@@ -476,7 +523,7 @@ export async function fetchClimateData(lat: number, lng: number, plantingDate?: 
                 precipitation: Math.round((precipSum / count) * 10) / 10,
                 humidity: Math.round(humiditySum / count),
               };
-              climateCache.set(key, result);
+              cacheSet(climateCache, key, result);
               return result;
             }
           }
@@ -488,7 +535,7 @@ export async function fetchClimateData(lat: number, lng: number, plantingDate?: 
 
     // Fallback: use current weather
     const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,precipitation&temperature_unit=celsius`
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m&wind_speed_unit=kmh&temperature_unit=celsius`
     );
 
     if (!response.ok) {
@@ -501,8 +548,12 @@ export async function fetchClimateData(lat: number, lng: number, plantingDate?: 
       temperature: Math.round(data.current.temperature_2m * 10) / 10,
       precipitation: Math.round((data.current.precipitation || 0) * 10) / 10,
       humidity: Math.round(data.current.relative_humidity_2m),
+      windSpeed:
+        data.current.wind_speed_10m != null
+          ? Math.round(data.current.wind_speed_10m)
+          : undefined,
     };
-    climateCache.set(key, result);
+    cacheSet(climateCache, key, result);
     return result;
   } catch (error) {
     console.error('Climate API error:', error);
@@ -511,9 +562,9 @@ export async function fetchClimateData(lat: number, lng: number, plantingDate?: 
 }
 
 // Fetch air quality data from Open-Meteo Air Quality API
-export async function fetchAirQualityData(lat: number, lng: number): Promise<AirQualityData> {
+export async function fetchAirQualityData(lat: number, lng: number, opts?: FetchOpts): Promise<AirQualityData> {
   const key = coordKey(lat, lng);
-  const cached = airQualityCache.get(key);
+  const cached = cacheGet(airQualityCache, key, CACHE_TTL.airQuality, opts?.force);
   if (cached) return cached;
 
   try {
@@ -556,7 +607,7 @@ export async function fetchAirQualityData(lat: number, lng: number): Promise<Air
       hourly: hourlyData,
     };
 
-    airQualityCache.set(key, result);
+    cacheSet(airQualityCache, key, result);
     return result;
   } catch (error) {
     console.error('Air Quality API error:', error);
@@ -565,9 +616,9 @@ export async function fetchAirQualityData(lat: number, lng: number): Promise<Air
 }
 
 // Fetch historical climate trends for the past 5 years from Open-Meteo Archive API
-export async function fetchClimateTrends(lat: number, lng: number): Promise<ClimateTrendsData> {
+export async function fetchClimateTrends(lat: number, lng: number, opts?: FetchOpts): Promise<ClimateTrendsData> {
   const key = coordKey(lat, lng);
-  const cached = climateTrendsCache.get(key);
+  const cached = cacheGet(climateTrendsCache, key, CACHE_TTL.climateTrends, opts?.force);
   if (cached) return cached;
 
   try {
@@ -604,7 +655,7 @@ export async function fetchClimateTrends(lat: number, lng: number): Promise<Clim
       },
     };
 
-    climateTrendsCache.set(key, result);
+    cacheSet(climateTrendsCache, key, result);
     return result;
   } catch (error) {
     console.error('Climate Trends API error:', error);
@@ -668,7 +719,8 @@ export async function fetchMandiPrices(
   if (!key || !commodity) return null;
 
   const cacheKey = `${commodity}|${opts?.state ?? ''}`;
-  if (mandiCache.has(cacheKey)) return mandiCache.get(cacheKey) ?? null;
+  const cachedMandi = cacheGet(mandiCache, cacheKey, CACHE_TTL.mandi);
+  if (cachedMandi !== undefined) return cachedMandi;
 
   try {
     const params = new URLSearchParams({
@@ -698,7 +750,7 @@ export async function fetchMandiPrices(
       .sort((a, b) => a.date.localeCompare(b.date));
 
     if (points.length === 0) {
-      mandiCache.set(cacheKey, null);
+      cacheSet(mandiCache, cacheKey, null);
       return null;
     }
 
@@ -716,11 +768,11 @@ export async function fetchMandiPrices(
       trailingAvgPerTon: Math.round(trailingAvg),
       trendPct: trailingAvg ? Math.round(((latest - trailingAvg) / trailingAvg) * 100) : 0,
     };
-    mandiCache.set(cacheKey, series);
+    cacheSet(mandiCache, cacheKey, series);
     return series;
   } catch (error) {
     console.warn('Agmarknet fetch failed, falling back to reference price:', error);
-    mandiCache.set(cacheKey, null);
+    cacheSet(mandiCache, cacheKey, null);
     return null;
   }
 }
@@ -745,9 +797,9 @@ function seededRandom(lat: number, lng: number): () => number {
 }
 
 // Fetch real soil data from ISRIC SoilGrids API (free, no API key required)
-export async function fetchSoilData(lat: number, lng: number): Promise<SoilData> {
+export async function fetchSoilData(lat: number, lng: number, opts?: FetchOpts): Promise<SoilData> {
   const key = coordKey(lat, lng);
-  const cached = soilCache.get(key);
+  const cached = cacheGet(soilCache, key, CACHE_TTL.soil, opts?.force);
   if (cached) return cached;
 
   try {
@@ -778,8 +830,15 @@ export async function fetchSoilData(lat: number, lng: number): Promise<SoilData>
 
       const potassium = Math.round(100 + (nitrogen * 1.5) + (phosphorus * 2));
 
-      const result: SoilData = { pH, nitrogen, phosphorus, potassium, source: 'isric' };
-      soilCache.set(key, result);
+      const result: SoilData = {
+        pH,
+        nitrogen,
+        phosphorus,
+        potassium,
+        source: 'isric',
+        fetchedAt: new Date().toISOString(),
+      };
+      cacheSet(soilCache, key, result);
       return result;
     }
 
@@ -824,8 +883,9 @@ export async function fetchSoilData(lat: number, lng: number): Promise<SoilData>
       phosphorus: Math.round(phosphorus),
       potassium: Math.round(potassium),
       source: 'estimated',
+      fetchedAt: new Date().toISOString(),
     };
-    soilCache.set(key, fallback);
+    cacheSet(soilCache, key, fallback);
     return fallback;
   }
 }

@@ -61,3 +61,7 @@ create trigger exchange_complete
   before update on exchanges
   for each row
   execute function tg_exchange_complete();
+
+-- NOTE: farm-membership helpers current_farm_ids() / is_farm_member() live in
+-- migrations/20260908_02_farm_members.sql, not here -- they reference farm_members
+-- (and farms), which the migrations create AFTER this file runs on a fresh build.

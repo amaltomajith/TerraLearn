@@ -384,11 +384,11 @@ export function FinancialResults({
 
         <motion.div variants={itemVariants} className="pt-4 border-t border-border/20 space-y-2">
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            Estimates based on real-time climate data, soil conditions, seasonal factors, latitude analysis, and projected market trends. 
-            Costs include fixed per-hectare expenses and variable costs. Actual results may vary.
+            Estimates based on regional climate normals, a ~250 m soil model, seasonal factors, latitude analysis, and projected market trends.
+            These are not measurements of your field. Costs include fixed per-hectare expenses and variable costs. Actual results may vary.
           </p>
           <p className="text-[11px] text-muted-foreground/70 leading-relaxed italic">
-            <span className="font-semibold not-italic text-muted-foreground/80">Note:</span> This project is a proof-of-concept for a data-driven agricultural simulation. While it fetches real-time baseline data via Open-Meteo &amp; ISRIC SoilGrids, the yield and pricing models are intended for demonstration purposes and should not be used for actual financial planning.
+            <span className="font-semibold not-italic text-muted-foreground/80">Note:</span> This project is a proof-of-concept for a data-driven agricultural simulation. While it fetches regional baseline data from Open-Meteo &amp; ISRIC SoilGrids, the yield and pricing models are intended for demonstration purposes and should not be used for actual financial planning.
           </p>
         </motion.div>
       </div>

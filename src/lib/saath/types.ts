@@ -38,6 +38,21 @@ export interface Farm {
   created_at: string;
 }
 
+/**
+ * Farm membership / role. Owner-only in the UI today (every farm has exactly one
+ * `'owner'` row, kept in step with `farms.farmer_id` by a DB trigger); `manager`
+ * / `worker` are reserved for a later employee / chore-assignment feature.
+ * See migrations/20260908_02_farm_members.sql.
+ */
+export type FarmMemberRole = 'owner' | 'manager' | 'worker';
+
+export interface FarmMember {
+  farm_id: string;
+  farmer_id: string;
+  member_role: FarmMemberRole;
+  created_at: string;
+}
+
 export interface Listing {
   id: string;
   farmer_id: string;
