@@ -1,14 +1,21 @@
 import { Suspense, lazy } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react';
 import Home from '@/components/home';
 import { BrandSplash } from '@/components/BrandSplash';
+import { Onboarding } from '@/components/Onboarding';
 import { IdentityProvider } from '@/lib/identity/identity';
 import { AssistantProvider } from '@/lib/assistant/AssistantProvider';
 import { GlobalAssistant } from '@/components/assistant/GlobalAssistant';
 import { RequireOnboarding } from './RequireOnboarding';
 
 const SaathApp = lazy(() => import('@/components/saath/SaathApp'));
+
+/** `/add-farm/:farmId` — the add-farm wizard prefilled to edit an existing farm. */
+function EditFarmRoute() {
+  const { farmId } = useParams();
+  return <Onboarding mode="add-farm" farmId={farmId} />;
+}
 
 /**
  * Everything below the auth boundary. Signed-out users are bounced to /sign-in;
@@ -27,6 +34,8 @@ export function RootGate() {
             <AssistantProvider>
               <Routes>
                 <Route path="/" element={<Home />} />
+                <Route path="/add-farm" element={<Onboarding mode="add-farm" />} />
+                <Route path="/add-farm/:farmId" element={<EditFarmRoute />} />
                 <Route
                   path="/saath/*"
                   element={

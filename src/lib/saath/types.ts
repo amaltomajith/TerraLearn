@@ -34,6 +34,8 @@ export interface Farm {
   lng: number;
   is_primary: boolean;
   enterprises: string[];
+  /** Ordered crop display names; `crops[0]` === `primary_crop`. */
+  crops: string[];
   primary_crop: string | null;
   created_at: string;
 }
