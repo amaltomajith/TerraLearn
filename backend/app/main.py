@@ -112,6 +112,15 @@ class SaathSnapshot(BaseModel):
     myListings: Optional[List[SaathListing]] = None
     nearbyDemand: Optional[List[SaathBuyer]] = None
 
+class SeasonContext(BaseModel):
+    crop: Optional[str] = None
+    stage: Optional[str] = None
+    daySinceSowing: Optional[int] = None
+    expectedHarvest: Optional[str] = None  # ISO date
+    openAdvisories: Optional[List[str]] = None
+    myTasks: Optional[List[dict]] = None  # each dict: {title: str, dueDate?: str, status: str}
+
+# Extend AskRequest to include optional season context
 class AskRequest(BaseModel):
     question: str
     lat: Optional[float] = None
@@ -122,6 +131,7 @@ class AskRequest(BaseModel):
     suggestedCrops: Optional[List[str]] = None
     mandiTrendPct: Optional[float] = None
     buyerDemand: Optional[List[BuyerDemandCtx]] = None
+    season: Optional[SeasonContext] = None
     # Conversation memory + light identity (the backend stays stateless — the
     # client sends recent turns and the farmer's profile bits each call).
     history: Optional[List[ChatTurn]] = None
@@ -275,6 +285,31 @@ async def ask_question(req: AskRequest):
                     line += f" ({b.distanceKm} km away)"
                 lines.append(line)
             formatted_input += "\nNearby buyer demand:\n" + "\n".join(lines)
+
+        # Season context (new)
+        if req.season:
+            s = req.season
+            season_parts = []
+            if s.crop:
+                season_parts.append(f"Crop: {s.crop}")
+            if s.stage:
+                season_parts.append(f"Stage: {s.stage}")
+            if s.daySinceSowing is not None:
+                season_parts.append(f"DaySinceSowing: {s.daySinceSowing}")
+            if s.expectedHarvest:
+                season_parts.append(f"ExpectedHarvest: {s.expectedHarvest}")
+            if s.openAdvisories:
+                season_parts.append("OpenAdvisories: " + ", ".join(s.openAdvisories))
+            if s.myTasks:
+                task_strs = []
+                for t in s.myTasks:
+                    desc = t.get('title', '')
+                    due = t.get('dueDate')
+                    stat = t.get('status', '')
+                    task_strs.append(f"{desc} (due: {due or 'N/A'}, status: {stat})")
+                season_parts.append("MyTasks: " + "; ".join(task_strs))
+            if season_parts:
+                formatted_input += "\nSeason context: " + ", ".join(season_parts)
 
         if req.saath:
             saath_block = _format_saath(req.saath)

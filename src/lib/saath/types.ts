@@ -38,6 +38,11 @@ export interface Farm {
   crops: string[];
   primary_crop: string | null;
   created_at: string;
+  /**
+   * The signed-in farmer's role on this farm. `my_farms()` returns it from
+   * 20260909_02; treated as `'owner'` when absent (pre-migration / older data).
+   */
+  member_role?: FarmMemberRole;
 }
 
 /**

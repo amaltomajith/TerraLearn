@@ -96,6 +96,30 @@ export async function createProfileWithFarm(p: NewProfileWithFarm): Promise<Farm
   );
 }
 
+/** Create a farmer profile without a farm (for workers joining via invite). */
+export async function createFarmerProfileOnly(p: {
+  name: string;
+  phone?: string | null;
+  village?: string | null;
+  language?: string;
+}): Promise<Farmer> {
+  const sb = requireSupabase();
+  return unwrap(
+    await sb
+      .from('farmers')
+      .insert({
+        name: p.name,
+        phone: p.phone ?? null,
+        village: p.village ?? null,
+        language: p.language ?? 'kn',
+        role: 'farmer',
+      })
+      .select()
+      .single(),
+  );
+}
+
+
 export async function getMyFarms(): Promise<Farm[]> {
   const sb = requireSupabase();
   return unwrap(await sb.rpc('my_farms'));
