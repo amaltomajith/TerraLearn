@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { toast } from 'sonner';
-import { Cloud, Leaf, Sparkles, TestTube2, X, Zap, type LucideIcon } from 'lucide-react';
+import { Cloud, Leaf, Loader2, Sparkles, TestTube2, X, Zap, type LucideIcon } from 'lucide-react';
 import { Navigation } from './Navigation';
 import NavAuthControl from './saath/NavAuthControl';
 import { MapView } from './MapView';
@@ -128,6 +128,9 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
   const [soil, setSoil] = useState<SoilData | null>(null);
   const [climate, setClimate] = useState<ClimateData | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  // "lat,lng" the current soil/climate belong to — so a fresh pin shows a loading
+  // state instead of the previous spot's suggestions until its data arrives.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
   const effectiveRole: FarmerRole = isAddFarm ? ownFarmer?.role ?? 'farmer' : role;
   const isFarmer = effectiveRole === 'farmer' || effectiveRole === 'both';
@@ -188,6 +191,7 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
   // the same pin as a cache hit afterwards.
   useEffect(() => {
     if (!pos || !isFarmer) return;
+    const key = `${pos.lat},${pos.lng}`;
     let alive = true;
     setPreviewLoading(true);
     const t = setTimeout(() => {
@@ -198,6 +202,7 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
         if (!alive) return;
         if (s.status === 'fulfilled') setSoil(s.value);
         if (c.status === 'fulfilled') setClimate(c.value);
+        setLoadedKey(key);
         setPreviewLoading(false);
       });
     }, 400);
@@ -209,8 +214,12 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
 
   const suggestionSeason = pos ? getSeason(plantingDate ?? new Date(), pos.lat) : '';
 
+  // Soil/climate in state still belong to a previous pin — treat as "no data yet".
+  const previewStale = !!pos && loadedKey !== `${pos.lat},${pos.lng}`;
+  const previewBusy = previewLoading || previewStale;
+
   const cropSuggestions = useMemo(() => {
-    if (!isFarmer || !pos || !climate || !soil) return [];
+    if (!isFarmer || !pos || !climate || !soil || previewStale) return [];
     return suggestCropsWithCircular(
       climate,
       soil,
@@ -218,11 +227,11 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
       pos.lat,
       within,
     );
-  }, [isFarmer, pos, climate, soil, plantingDate, within]);
+  }, [isFarmer, pos, climate, soil, previewStale, plantingDate, within]);
 
   // Per-crop indicative estimate — synchronous, reference price only (no mandi).
   const cropEstimates = useMemo(() => {
-    if (!isFarmer || !soil || !climate || !pos || !locInfo) return [];
+    if (!isFarmer || !soil || !climate || !pos || !locInfo || previewStale) return [];
     const d = plantingDate ?? new Date();
     return crops.map((cropName) => {
       try {
@@ -236,7 +245,7 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
         return { crop: cropName, pricePerTon: 0, profitPerHa: 0 };
       }
     });
-  }, [crops, isFarmer, soil, climate, pos, locInfo, plantingDate]);
+  }, [crops, isFarmer, soil, climate, pos, locInfo, previewStale, plantingDate]);
 
   const derivedEnterprises = useMemo(() => {
     const fromCrops = crops
@@ -401,7 +410,7 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
   const badgeFor = (kind: PreviewProvenance): ReactNode =>
     kind === 'regional-estimate' && soil ? regionalEstimateBadge : undefined;
 
-  const showPreview = isFarmer && (previewLoading || !!soil);
+  const showPreview = isFarmer && (previewBusy || !!soil);
 
   // -------------------------------------------------------------- shared blocks
   const mapBlock = (
@@ -443,7 +452,12 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
         </div>
       </div>
 
-      {cropSuggestions.length > 0 ? (
+      {previewBusy ? (
+        <div className="rounded-xl border border-border/60 bg-muted/20 p-4 flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+          Reading this spot's soil and climate…
+        </div>
+      ) : cropSuggestions.length > 0 ? (
         <CropSuggestions
           suggestions={cropSuggestions}
           season={suggestionSeason}
@@ -455,9 +469,9 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
           variant="panel"
         />
       ) : (
-        previewLoading && (
+        !!soil && (
           <div className="rounded-xl border border-border/60 bg-muted/20 p-4 text-xs text-muted-foreground">
-            Reading this spot's soil and climate…
+            No confident crop match for this spot — add one below to simulate it anyway.
           </div>
         )
       )}
@@ -484,17 +498,21 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
                       </span>
                     )}
                   </div>
-                  {est && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {sym}
-                      {est.pricePerTon.toLocaleString()}/ton
-                      {' · '}
-                      {plantingDate ? (
-                        <>est. profit {sym}{est.profitPerHa.toLocaleString()}/ha</>
-                      ) : (
-                        <span className="italic">pick a planting date for a profit estimate</span>
-                      )}
-                    </p>
+                  {previewBusy ? (
+                    <p className="text-[11px] text-muted-foreground mt-0.5 italic">estimating…</p>
+                  ) : (
+                    est && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {sym}
+                        {est.pricePerTon.toLocaleString()}/ton
+                        {' · '}
+                        {plantingDate ? (
+                          <>est. profit {sym}{est.profitPerHa.toLocaleString()}/ha</>
+                        ) : (
+                          <span className="italic">pick a planting date for a profit estimate</span>
+                        )}
+                      </p>
+                    )
                   )}
                 </div>
                 <button
@@ -552,12 +570,12 @@ export function Onboarding({ mode = 'signup', farmId }: OnboardingProps = {}) {
               key={m.key}
               icon={PREVIEW_ICON[m.key]}
               label={m.label}
-              value={m.value}
+              value={previewStale ? '—' : m.value}
               unit={m.unit}
-              isLoading={previewLoading && !soil}
+              isLoading={previewBusy}
               delay={idx}
-              caption={captionFor(m.provenance)}
-              badge={badgeFor(m.provenance)}
+              caption={previewStale ? undefined : captionFor(m.provenance)}
+              badge={previewStale ? undefined : badgeFor(m.provenance)}
             />
           ))}
         </div>
