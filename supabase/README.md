@@ -32,6 +32,11 @@ Fresh database — numbered files first, then the migrations, then the seeds:
 50_realtime.sql
 migrations/20260906_01_farms.sql
 migrations/20260906_03_drop_demo.sql
+migrations/20260907_01_grant_read_rpcs.sql
+migrations/20260907_02_nearby_demand_listings.sql
+migrations/20260907_03_assistant_memory.sql
+migrations/20260908_01_knowledge_rag.sql
+migrations/20260908_02_farm_members.sql
 seed/51_ifs_matrix.sql
 seed/52_personas.sql
 seed/54_farms.sql

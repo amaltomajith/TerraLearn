@@ -266,3 +266,11 @@ alter table knowledge_chunks enable row level security;
 drop policy if exists knowledge_chunks_read on knowledge_chunks;
 create policy knowledge_chunks_read on knowledge_chunks
   for select using (true);
+
+-- ===========================================================================
+-- farm_members  (farm membership / roles)
+--   Added in migrations/20260908_02_farm_members.sql. The table and its policies
+--   live only in that migration (like `farms` in 20260906_01) because
+--   farm_members FKs farms, which is not in the canonical schema. Owner-only
+--   writes; roster readable by any member or the farm owner.
+-- ===========================================================================

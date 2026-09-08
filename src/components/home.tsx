@@ -19,8 +19,16 @@ import { MarketSignal } from './MarketSignal';
 import { SimulationStatus, type SimulationStep } from './SimulationStatus';
 import { TrendChart } from './TrendChart';
 import { EnvironmentalOutlook, type RiskBriefContext } from './EnvironmentalOutlook';
+import { AdvisoryCard } from './AdvisoryCard';
+import { paddyAdvisories } from '@/lib/advisories';
 import { Button } from './ui/button';
-import { Badge } from './ui/badge';
+import { getAqiSeverityBadge } from '@/lib/aqi';
+import {
+  relativeAge,
+  soilProvenanceLabel,
+  climateProvenanceLabel,
+  SOIL_PK_DISCLAIMER,
+} from '@/lib/dataProvenance';
 import {
   Cloud,
   Droplets,
@@ -93,6 +101,10 @@ function Home() {
   const [climateTrends, setClimateTrends] = useState<ClimateTrendsData | null>(null);
   const [isEnvLoading, setIsEnvLoading] = useState(false);
   const [envError, setEnvError] = useState<string | null>(null);
+  // When the live-ish readings (weather, AQI) were last refreshed — drives the
+  // "updated Xm ago" labels. Soil keeps its own `fetchedAt` on the payload.
+  const [liveFetchedAt, setLiveFetchedAt] = useState<{ aq?: number; climate?: number }>({});
+  const [isRefreshingLive, setIsRefreshingLive] = useState(false);
 
   const [cropSuggestions, setCropSuggestions] = useState<
     { crop: CropInfo; score: number; reasons: string[]; circular?: CircularOpportunity }[]
@@ -112,15 +124,63 @@ function Home() {
       fetchClimateData(lat, lng),
       fetchSoilData(lat, lng),
     ]);
-    if (aq.status === 'fulfilled') setAirQualityData(aq.value);
+    const now = Date.now();
+    if (aq.status === 'fulfilled') {
+      setAirQualityData(aq.value);
+      setLiveFetchedAt((s) => ({ ...s, aq: now }));
+    }
     if (trends.status === 'fulfilled') setClimateTrends(trends.value);
-    if (climate.status === 'fulfilled') setClimateData(climate.value);
+    if (climate.status === 'fulfilled') {
+      setClimateData(climate.value);
+      setLiveFetchedAt((s) => ({ ...s, climate: now }));
+    }
     if (soil.status === 'fulfilled') setSoilData(soil.value);
     if (aq.status === 'rejected' && trends.status === 'rejected') {
       setEnvError('Unable to fetch environmental data for this location.');
     }
     setIsEnvLoading(false);
   }, []);
+
+  // Explicit / scheduled refresh of just the live-ish readings (weather + AQI).
+  // Soil, 5-year trends and location keep their long cache TTLs and are not
+  // re-fetched here.
+  const refreshLiveEnv = useCallback(async () => {
+    if (!position) return;
+    const { lat, lng } = position;
+    setIsRefreshingLive(true);
+    const [aq, climate] = await Promise.allSettled([
+      fetchAirQualityData(lat, lng, { force: true }),
+      fetchClimateData(lat, lng, undefined, undefined, { force: true }),
+    ]);
+    const now = Date.now();
+    if (aq.status === 'fulfilled') {
+      setAirQualityData(aq.value);
+      setLiveFetchedAt((s) => ({ ...s, aq: now }));
+    }
+    if (climate.status === 'fulfilled') {
+      setClimateData(climate.value);
+      setLiveFetchedAt((s) => ({ ...s, climate: now }));
+    }
+    setIsRefreshingLive(false);
+  }, [position]);
+
+  // Light background refresh while the tab is visible. Weather / AQI only.
+  useEffect(() => {
+    if (!position) return;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') refreshLiveEnv();
+    }, 15 * 60_000);
+    return () => clearInterval(id);
+  }, [position, refreshLiveEnv]);
+
+  // Re-render once a minute so the "updated Xm ago" labels stay honest between
+  // refreshes.
+  const [, tickAgeLabels] = useState(0);
+  useEffect(() => {
+    if (!position) return;
+    const id = setInterval(() => tickAgeLabels((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, [position]);
 
   const handlePositionChange = useCallback(
     (lat: number, lng: number) => {
@@ -129,6 +189,7 @@ function Home() {
       setResults(null);
       setClimateData(null);
       setSoilData(null);
+      setLiveFetchedAt({});
       setShowSuggestions(false);
       setCropSuggestions([]);
       setDemandMatches([]);
@@ -449,37 +510,31 @@ function Home() {
     };
   }, [results, selectedCrop, plantingDate, position, showResults]);
 
+  // Time-sensitive paddy advisories (v1 scope: paddy only). Derived from data
+  // already fetched — no new endpoints.
+  const paddyAdvisoryList = useMemo(() => {
+    if (selectedCrop !== 'Rice' || !plantingDate) return [];
+    const crop = CROP_DATABASE.rice;
+    return paddyAdvisories({
+      plantingDate,
+      crop,
+      climate: climateData,
+      soil: soilData,
+      airQuality: airQualityData,
+      yieldWarnings: results?.warnings ?? [],
+    });
+  }, [selectedCrop, plantingDate, climateData, soilData, airQualityData, results]);
+
   // Feed the current pin / crop result / environment snapshot to the global assistant.
   useAssistantPageContext({ position, cropContext, assistantContext });
 
-  const getAqiSeverityBadge = (type: 'us_aqi' | 'pm2_5' | 'pm10' | 'ozone', value: number) => {
-    let label = 'Good';
-    let styleClass = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
-    const set = (l: string, c: string) => {
-      label = l;
-      styleClass = c;
-    };
-    const bad = 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
-    const mid = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
-    if (type === 'us_aqi') {
-      if (value > 100) set('Unhealthy', bad);
-      else if (value > 50) set('Moderate', mid);
-    } else if (type === 'pm2_5') {
-      if (value > 35.4) set('Unhealthy', bad);
-      else if (value > 12.0) set('Moderate', mid);
-    } else if (type === 'pm10') {
-      if (value > 154) set('Unhealthy', bad);
-      else if (value > 54) set('Moderate', mid);
-    } else if (type === 'ozone') {
-      if (value > 180) set('Unhealthy', bad);
-      else if (value > 100) set('Moderate', mid);
-    }
-    return (
-      <Badge variant="outline" className={`text-[10px] font-semibold border ${styleClass}`}>
-        {label}
-      </Badge>
-    );
-  };
+  const aqAge = liveFetchedAt.aq ? relativeAge(new Date(liveFetchedAt.aq).toISOString()) : '';
+
+  const regionalEstimateBadge = (
+    <span className="text-[10px] font-semibold text-muted-foreground border border-border/60 rounded-full px-1.5 py-0.5 whitespace-nowrap">
+      regional estimate
+    </span>
+  );
 
   const canSimulate = position && selectedCrop && plantingDate;
   const completedCount = [!!position, !!selectedCrop, !!plantingDate].filter(Boolean).length;
@@ -613,17 +668,57 @@ function Home() {
                   )}
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <MetricCard icon={Cloud} label="Temp" value={climateData?.temperature ?? '—'} unit="°C" isLoading={!climateData} delay={0} />
+                  <MetricCard
+                    icon={Cloud}
+                    label="Temp"
+                    value={climateData?.temperature ?? '—'}
+                    unit="°C"
+                    isLoading={!climateData}
+                    delay={0}
+                    caption={climateProvenanceLabel(liveFetchedAt.climate)}
+                  />
                   <MetricCard icon={Droplets} label="Rain" value={climateData?.precipitation ?? '—'} unit="mm" isLoading={!climateData} delay={1} />
                   <MetricCard icon={Wind} label="Humidity" value={climateData?.humidity ?? '—'} unit="%" isLoading={!climateData} delay={2} />
-                  <MetricCard icon={Zap} label="Soil pH" value={soilData?.pH ?? '—'} isLoading={!soilData} delay={3} />
-                  <MetricCard icon={Leaf} label="Nitrogen" value={soilData?.nitrogen ?? '—'} unit="ppm" isLoading={!soilData} delay={4} />
-                  <MetricCard icon={TestTube2} label="Phosphorus" value={soilData?.phosphorus ?? '—'} unit="ppm" isLoading={!soilData} delay={5} />
+                  <MetricCard
+                    icon={Zap}
+                    label="Soil pH"
+                    value={soilData?.pH ?? '—'}
+                    isLoading={!soilData}
+                    delay={3}
+                    caption={soilData ? soilProvenanceLabel(soilData) : undefined}
+                  />
+                  <MetricCard
+                    icon={Leaf}
+                    label="Nitrogen"
+                    value={soilData?.nitrogen ?? '—'}
+                    unit="ppm"
+                    isLoading={!soilData}
+                    delay={4}
+                    badge={soilData ? regionalEstimateBadge : undefined}
+                  />
+                  <MetricCard
+                    icon={TestTube2}
+                    label="Phosphorus"
+                    value={soilData?.phosphorus ?? '—'}
+                    unit="ppm"
+                    isLoading={!soilData}
+                    delay={5}
+                    badge={soilData ? regionalEstimateBadge : undefined}
+                  />
+                  <MetricCard
+                    icon={Sparkles}
+                    label="Potassium"
+                    value={soilData?.potassium ?? '—'}
+                    unit="ppm"
+                    isLoading={!soilData}
+                    delay={6}
+                    badge={soilData ? regionalEstimateBadge : undefined}
+                  />
                 </div>
-                {soilData?.source === 'estimated' && (
-                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    <Info className="w-3 h-3 shrink-0" />
-                    estimated · soil data unavailable for this location
+                {soilData && (
+                  <p className="text-[11px] text-muted-foreground flex items-start gap-1">
+                    <Info className="w-3 h-3 shrink-0 mt-0.5" />
+                    <span>{SOIL_PK_DISCLAIMER}</span>
                   </p>
                 )}
               </motion.div>
@@ -636,6 +731,21 @@ function Home() {
                     <Activity className="w-4 h-4 text-primary" />
                   </div>
                   <h3 className="text-xl font-bold text-foreground">Air quality</h3>
+                  <div className="ml-auto flex items-center gap-2">
+                    {aqAge && (
+                      <span className="text-[11px] text-muted-foreground">updated {aqAge}</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={refreshLiveEnv}
+                      disabled={isRefreshingLive}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+                      aria-label="Refresh weather and air quality"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isRefreshingLive ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <MetricCard
@@ -714,7 +824,7 @@ function Home() {
                   />
                 </div>
                 <TrendChart
-                  title="PM2.5 Air Quality Forecast"
+                  title="PM2.5 — recent hourly"
                   description="Hourly PM2.5 particulate concentration (µg/m³)"
                   badgeText="Recent"
                   badgeVariant="secondary"
@@ -892,6 +1002,9 @@ function Home() {
                   mandiTrendPct={results.mandiTrendPct}
                 />
                 {showResults && <EnvironmentalOutlook context={riskBriefContext} />}
+                {showResults && selectedCrop === 'Rice' && plantingDate && (
+                  <AdvisoryCard advisories={paddyAdvisoryList} />
+                )}
               </>
             )}
 

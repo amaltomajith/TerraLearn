@@ -322,7 +322,7 @@ async def get_risk_brief(req: RiskBriefRequest):
             f"Planting Date: {req.plantingDate}\n"
             f"Pre-computed Viability Score: {req.viabilityScore}/100\n"
             f"Estimated Yield: {req.yieldEstimate:.2f} tons/ha\n\n"
-            f"Task: Use your available tools (real-time AQI data and environmental knowledge base) "
+            f"Task: Use your available tools (current-hour AQI readings for the nearest grid cell and environmental knowledge base) "
             f"to write exactly 2-3 sentences summarising the key environmental risks or favourable "
             f"conditions for growing {req.crop} at this location right now. "
             f"Be specific: mention pollutant levels, temperature suitability, or weather risks if relevant. "

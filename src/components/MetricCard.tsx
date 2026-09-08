@@ -9,9 +9,10 @@ interface MetricCardProps {
   isLoading?: boolean;
   delay?: number;
   badge?: React.ReactNode;
+  caption?: React.ReactNode;
 }
 
-export function MetricCard({ icon: Icon, label, value, unit, isLoading, delay = 0, badge }: MetricCardProps) {
+export function MetricCard({ icon: Icon, label, value, unit, isLoading, delay = 0, badge, caption }: MetricCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -37,6 +38,9 @@ export function MetricCard({ icon: Icon, label, value, unit, isLoading, delay = 
               {value}
               {unit && <span className="text-sm ml-1 text-muted-foreground font-sans">{unit}</span>}
             </p>
+          )}
+          {caption && !isLoading && (
+            <p className="text-[11px] text-muted-foreground leading-snug mt-1.5">{caption}</p>
           )}
         </div>
       </div>
