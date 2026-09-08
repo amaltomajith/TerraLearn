@@ -5,9 +5,11 @@ import { ThemeProvider } from "./components/ThemeProvider";
 import { BrandSplash } from "./components/BrandSplash";
 import { hasClerk, hasSupabase } from "./lib/saath/config";
 import { UnconfiguredApp } from "./auth/UnconfiguredApp";
-import { RootGate } from "./auth/RootGate";
+
 import { SignInPage, SignUpPage } from "./auth/AuthPages";
 import { clerkAppearance } from "./components/saath/clerkAppearance";
+import { RootGate } from "./auth/RootGate";
+import { Landing } from "../hero/src/routes/index";
 
 const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
@@ -32,6 +34,7 @@ function App() {
             <Routes>
               <Route path="/sign-in/*" element={<SignInPage />} />
               <Route path="/sign-up/*" element={<SignUpPage />} />
+              <Route path="/" element={<Landing />} />
               <Route path="/*" element={<RootGate />} />
             </Routes>
           </ClerkLoaded>

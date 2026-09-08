@@ -50,7 +50,8 @@ export function RootGate() {
                 <RequireOnboarding>
                   <AssistantProvider>
                     <Routes>
-                      <Route path="/" element={<Home />} />
+                      <Route path="/dashboard" element={<Home />} />
+                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="/add-farm" element={<Onboarding mode="add-farm" />} />
                       <Route path="/add-farm/:farmId" element={<EditFarmRoute />} />
                       <Route
@@ -69,7 +70,7 @@ export function RootGate() {
                           </Suspense>
                         }
                       />
-                      <Route path="*" element={<Navigate to="/" replace />} />
+                      <Route path="*" element={<Navigate to="/dashboard" replace />} />
                     </Routes>
                     <GlobalAssistant />
                   </AssistantProvider>
