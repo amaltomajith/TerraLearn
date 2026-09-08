@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@700;900&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Fraunces:wght@700;900&family=Manrope:wght@400;500;600;700&display=swap');
+
+
 
 @tailwind base;
 @tailwind components;
@@ -162,4 +164,64 @@
     .scrollbar-thin::-webkit-scrollbar-thumb:hover {
       background: hsl(var(--muted-foreground));
     }
+  }
+
+  /* --- HERO LANDING PAGE SPECIFIC CSS --- */
+  :root {
+    --live: oklch(0.72 0.11 75);
+    --live-soft: oklch(0.72 0.11 75 / 14%);
+    --vision: oklch(0.55 0.07 145);
+    --vision-soft: oklch(0.55 0.07 145 / 14%);
+    --hairline: oklch(1 0 0 / 9%);
+    --soil: oklch(0.72 0.11 75);
+    --foliage: oklch(0.55 0.07 145);
+    --bone: oklch(0.95 0.02 90);
+    --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  @layer utilities {
+    .text-balance-tight {
+      text-wrap: balance;
+      letter-spacing: -0.035em;
+      line-height: 0.95;
+    }
+    
+    .font-display { font-family: var(--font-display); }
+    .font-mono { font-family: var(--font-mono); }
+    .text-bone { color: var(--bone); }
+    .text-soil { color: var(--soil); }
+    .text-foliage { color: var(--foliage); }
+    .bg-soil { background-color: var(--soil); }
+    .bg-foliage { background-color: var(--foliage); }
+    .bg-hairline { background-color: var(--hairline); }
+    .border-soil { border-color: var(--soil); }
+    .border-foliage { border-color: var(--foliage); }
+    .border-hairline { border-color: var(--hairline); }
+    
+    .bg-soil\/30 { background-color: oklch(0.72 0.11 75 / 30%); }
+    .bg-soil\/10 { background-color: oklch(0.72 0.11 75 / 10%); }
+    .border-soil\/40 { border-color: oklch(0.72 0.11 75 / 40%); }
+    .bg-foliage\/10 { background-color: oklch(0.55 0.07 145 / 10%); }
+    .border-foliage\/40 { border-color: oklch(0.55 0.07 145 / 40%); }
+    .bg-bone\/5 { background-color: oklch(0.95 0.02 90 / 5%); }
+    .border-bone\/10 { border-color: oklch(0.95 0.02 90 / 10%); }
+    .border-bone\/20 { border-color: oklch(0.95 0.02 90 / 20%); }
+    .text-bone\/35 { color: oklch(0.95 0.02 90 / 35%); }
+    .text-bone\/45 { color: oklch(0.95 0.02 90 / 45%); }
+    .text-bone\/50 { color: oklch(0.95 0.02 90 / 50%); }
+    .text-bone\/65 { color: oklch(0.95 0.02 90 / 65%); }
+    .text-bone\/80 { color: oklch(0.95 0.02 90 / 80%); }
+
+    .grain {
+      background-image: radial-gradient(oklch(1 0 0 / 4%) 1px, transparent 1px);
+      background-size: 3px 3px;
+    }
+  }
+
+  @keyframes terra-drift {
+    0% { transform: translateY(0); opacity: 0.35; }
+    50% { transform: translateY(6px); opacity: 1; }
+    100% { transform: translateY(0); opacity: 0.35; }
   }

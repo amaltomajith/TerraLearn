@@ -6,6 +6,7 @@ module.exports = {
     './components/**/*.{ts,tsx}',
     './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
+    './hero/src/**/*.{ts,tsx}',
   ],
   prefix: "",
   theme: {
@@ -18,7 +19,8 @@ module.exports = {
   	},
   	extend: {
   		fontFamily: {
-  			sans: ['Manrope', 'sans-serif'],
+  			sans: ['Figtree', 'Manrope', 'sans-serif'],
+  			display: ['Outfit', 'sans-serif'],
   			serif: ['Fraunces', 'serif'],
   			mono: ['JetBrains Mono', 'monospace'],
   		},
@@ -65,7 +67,11 @@ module.exports = {
   				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
   				border: 'hsl(var(--sidebar-border))',
   				ring: 'hsl(var(--sidebar-ring))'
-  			}
+  			},
+  			soil: 'var(--soil)',
+  			foliage: 'var(--foliage)',
+  			bone: 'var(--bone)',
+  			hairline: 'var(--hairline)',
   		},
   		borderRadius: {
   			lg: 'var(--radius)',
@@ -88,11 +94,17 @@ module.exports = {
   				to: {
   					height: '0'
   				}
-  			}
+  			},
+  			'terra-drift': {
+  				'0%': { transform: 'translateY(0)', opacity: '0.35' },
+  				'50%': { transform: 'translateY(6px)', opacity: '1' },
+  				'100%': { transform: 'translateY(0)', opacity: '0.35' },
+  			},
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
+  			'accordion-up': 'accordion-up 0.2s ease-out',
+  			'terra-drift': 'terra-drift 2.6s ease-in-out infinite'
   		}
   	}
   },
