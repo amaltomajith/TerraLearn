@@ -7,6 +7,7 @@ import {
   Users,
   Plus,
   Copy,
+  Link,
   Trash2,
   UserPlus,
   ShieldCheck,
@@ -318,11 +319,22 @@ export default function TeamPanel() {
                     </span>
                     <button
                       onClick={async () => {
+                        const link = `${window.location.origin}/sign-up?invite=${inv.code}`;
+                        await navigator.clipboard.writeText(link);
+                        toast.success('Sign-up link copied — share with the farmer!');
+                      }}
+                      className="text-muted-foreground hover:text-primary"
+                      title="Copy sign-up link"
+                    >
+                      <Link className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={async () => {
                         await navigator.clipboard.writeText(inv.code);
                         toast.success('Copied!');
                       }}
                       className="text-muted-foreground hover:text-foreground"
-                      title="Copy code"
+                      title="Copy code only"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>

@@ -22,6 +22,7 @@ import { AddCycleDialog } from './farm/AddCycleDialog';
 import { FarmLog } from './farm/FarmLog';
 import { YieldProjectionCard } from './farm/YieldProjectionCard';
 import { MyTasksCard } from './farm/MyTasksCard';
+import { DailyGuidelinesCard } from './farm/DailyGuidelinesCard';
 import { AdvisoryTaskDialog } from './farm/AdvisoryTaskDialog';
 import { useFarmSeason } from '@/lib/farm/useFarmSeason';
 import type { Advisory } from '@/lib/advisories';
@@ -763,6 +764,12 @@ function Home() {
 
           {/* RIGHT — active crop season */}
           <div className="space-y-6">
+            <DailyGuidelinesCard
+              climate={climateData}
+              soil={soilData}
+              activeCycle={activeCycle ?? null}
+              isLoading={isEnvLoading}
+            />
             <MyTasksCard compact={activeRole !== 'worker'} />
 
             {!activeCycle ? (
