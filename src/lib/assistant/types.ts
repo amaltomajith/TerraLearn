@@ -44,11 +44,22 @@ export interface AssistantExtraContext {
   }[];
 }
 
-export interface AssistantPageContext {
+export interface SeasonContext {
+  crop?: string;
+  stage?: string;
+  daySinceSowing?: number;
+  expectedHarvest?: string | null; // ISO date
+  openAdvisories?: string[];
+  myTasks?: { title: string; dueDate?: string | null; status: string }[];
+}
+
+  export interface AssistantPageContext {
   position: { lat: number; lng: number } | null;
   cropContext?: CropContextData | null;
   assistantContext?: AssistantExtraContext | null;
+  season?: SeasonContext | null;
 }
+
 
 // ---------------------------------------------------------------------------
 // Assistant actions (PR3) — declared now so the persisted `meta` shape is
@@ -143,6 +154,16 @@ export interface AssistantMessage {
 // Backend contract
 // ---------------------------------------------------------------------------
 
+/** Active crop season summary — sent alongside env context. */
+export interface BackendSeasonContext {
+  crop: string;
+  stage: string;
+  daySinceSowing: number;
+  expectedHarvest: string | null; // ISO date
+  openAdvisories: string[];       // advisory titles only
+  myTasks?: { title: string; dueDate?: string | null; status: string }[];
+}
+
 export interface AskPayload {
   question: string;
   lat?: number | null;
@@ -160,6 +181,7 @@ export interface AskPayload {
   mandiTrendPct?: number;
   buyerDemand?: AssistantExtraContext['buyerDemand'];
   saath?: SaathSnapshot;
+  season?: BackendSeasonContext | null;
 }
 
 export interface AskResult {

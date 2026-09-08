@@ -1,0 +1,61 @@
+33	Ministry of Consumer Affairs, Food & Public Distribution	Multiple intermediaries reduce farmers earnings and increase consumer prices.	Software	SIH26033	0/500	Agriculture, FoodTech & Rural Development	20 September 2026
+Problem Statement Title	
+Multiple intermediaries reduce farmers earnings and increase consumer prices.
+Description	
+Expected Solution: Create a digital marketplace that:
+
+• Connects farmers/FPOs directly with consumers and bulk buyers.
+• Provides logistics support.
+• Uses AI for demand forecasting and route optimization.
+
+Benefits:
+
+• Better prices for farmers.
+• Lower prices for consumers.
+• Reduced supply chain inefficiencies.
+Organization	Ministry of Consumer Affairs, Food & Public Distribution
+Department	Department of Consumer Affairs (DoCA)
+Category	Software
+Theme	Agriculture, FoodTech & Rural Development
+
+
+131	Government Of Maharashtra	Early detection and management of crop diseases and pest infestations	Software	SIH26131	0/500	Agriculture, FoodTech & Rural Development	20 September 2026
+Problem Statement ID	
+26131
+Problem Statement Title	
+Early detection and management of crop diseases and pest infestations
+Description	
+• Problem Description Farmers often recognise crop diseases or pest infestations only after visible damage has spread. Extension staff may cover large areas, while laboratory diagnosis and expert advice may not be immediately available. Weather, crop stage, variety, soil condition and local pest history influence risk, but these inputs are rarely combined into actionable farm-level alerts. Incorrect diagnosis may lead to delayed treatment, excessive or inappropriate pesticide use, increased cultivation cost,residue concerns and yield loss. The challenge is to provide timely, reliable and locally relevant detection,forecasting and management support.
+• Expected Solution / Outcome A farmer- and extension-worker-friendly crop-health system that supports image based symptom identification, pest-trap or sensor inputs, weather-based risk forecasting, geospatial hotspot mapping,expert validation and multilingual advisories. The system should recommend integrated pest and disease management actions, safe input usage,referral to extension or laboratories, and follow-up monitoring. It should learn from field confirmations and provide dashboards for agriculture officials.Expected outcomes include earlier detection, reduced crop loss, more targeted pesticide use, faster extension response, improved surveillance coverage and better planning of preventive interventions.
+Organization	Government Of Maharashtra
+Department	Maharashtra State Innovation Society, Department of Skills, Employment, Entrepreneurship and Innovation
+Category	Software
+Theme	Agriculture, FoodTech & Rural Development
+
+
+132	Government Of Maharashtra	Strengthening market linkages and price discovery for farmers	Software	SIH26132	0/500	Agriculture, FoodTech & Rural Development	20 September 2026
+Problem Statement ID	
+26132
+Problem Statement Title	
+Strengthening market linkages and price discovery for farmers
+Description	
+• Problem Description Many farmers, especially smallholders and producer groups, have limited visibility of current and expected prices across nearby markets, processors,institutional buyers and digital trading channels. Information on quality specifications, demand, logistics,storage, payment reliability and buyer credentials may be fragmented. Farmers may sell immediately after harvest because of liquidity or storage constraints and may have weak bargaining power. Buyers, meanwhile,may struggle to aggregate consistent volumes and verify quality. The challenge is to improve transparent price discovery and create reliable, efficient linkages from farm gate to suitable buyers.
+• Expected Solution / Outcome A market-intelligence and transaction enablement solution that aggregates mandi prices, buyer demand, quality requirements, arrival volumes, transport and storage options; provides localised price trends and sale-window recommendations; matches farmers/FPOs with verified buyers; enables lot creation, quality grading,digital offers, logistics coordination and payment tracking; and supports dispute or grievance processes. Expected outcomes include improved farmer price realisation, reduced information asymmetry, lower transaction cost,stronger FPO aggregation, reduced post harvest loss, more reliable buyer sourcing and transparent transaction records.
+Organization	Government Of Maharashtra
+Department	Maharashtra State Innovation Society, Department of Skills, Employment, Entrepreneurship and Innovation
+Category	Software
+Theme	Agriculture, FoodTech & Rural Development
+
+
+193	AICTE	Student Innovation-Developing solutions, keeping in mind the need to enhance the primary sector of India - Agriculture and to manage and process our agriculture produce.	Software	SIH26193	0/500	Agriculture, FoodTech & Rural Development	20 September 2026
+Problem Statement Details
+Problem Statement ID	
+26193
+Problem Statement Title	
+Student Innovation-Developing solutions, keeping in mind the need to enhance the primary sector of India - Agriculture and to manage and process our agriculture produce.
+Description	
+Student Innovation-Developing solutions, keeping in mind the need to enhance the primary sector of India - Agriculture and to manage and process our agriculture produce.
+Organization	AICTE
+Department	AICTE, MIC-Student Innovation
+Category	Software
+Theme	Agriculture, FoodTech & Rural Development

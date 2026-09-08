@@ -9,18 +9,24 @@ import { useAssistantPageContext } from '@/lib/assistant/useAssistantPageContext
 import type { AssistantExtraContext } from '@/lib/assistant/types';
 import { useIdentity } from '@/lib/identity/identity';
 import { getMapPoints, getIfsLoops, nearbyDemandListings } from '@/lib/saath/queries';
-import type { MapPointRow, IfsMatchRow, NearbyDemandRow } from '@/lib/saath/types';
+import type { MapPointRow, IfsMatchRow, NearbyDemandRow, Farm } from '@/lib/saath/types';
 import { CropSelector } from './CropSelector';
 import { DateSelector } from './DateSelector';
 import { MetricCard } from './MetricCard';
-import { FinancialResults } from './FinancialResults';
 import { CropSuggestions } from './CropSuggestions';
-import { MarketSignal } from './MarketSignal';
-import { SimulationStatus, type SimulationStep } from './SimulationStatus';
 import { TrendChart } from './TrendChart';
 import { EnvironmentalOutlook, type RiskBriefContext } from './EnvironmentalOutlook';
 import { AdvisoryCard } from './AdvisoryCard';
-import { paddyAdvisories } from '@/lib/advisories';
+import { CropCalendar } from './farm/CropCalendar';
+import { AddCycleDialog } from './farm/AddCycleDialog';
+import { FarmLog } from './farm/FarmLog';
+import { YieldProjectionCard } from './farm/YieldProjectionCard';
+import { MyTasksCard } from './farm/MyTasksCard';
+import { AdvisoryTaskDialog } from './farm/AdvisoryTaskDialog';
+import { useFarmSeason } from '@/lib/farm/useFarmSeason';
+import type { Advisory } from '@/lib/advisories';
+import { buildCropTimeline } from '@/lib/cropCalendar';
+import { cropAdvisories } from '@/lib/advisories';
 import { Button } from './ui/button';
 import { getAqiSeverityBadge } from '@/lib/aqi';
 import {
@@ -48,6 +54,7 @@ import {
   RefreshCw,
   Users,
   Info,
+  ClipboardList,
 } from 'lucide-react';
 import {
   fetchClimateData,
@@ -62,8 +69,6 @@ import {
   type ClimateData,
   type SoilData,
   type LocationInfo,
-  type SimulationResult,
-  type CropInfo,
   type AirQualityData,
   type ClimateTrendsData,
   type MandiPriceSeries,
@@ -72,7 +77,6 @@ import {
   suggestCropsWithCircular,
   demandRatePerTon,
   CROP_TO_SALE_CATEGORY,
-  type CircularOpportunity,
 } from '@/lib/cropEnterprise';
 import { toast } from 'sonner';
 
@@ -85,16 +89,14 @@ function Home() {
   const [ifsRows, setIfsRows] = useState<IfsMatchRow[]>([]);
   const [selectedCrop, setSelectedCrop] = useState('');
   const [plantingDate, setPlantingDate] = useState<Date>();
-  const [areaHectares, setAreaHectares] = useState<number>(1);
-  const [areaUnit, setAreaUnit] = useState<'hectares' | 'acres'>('hectares');
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simulationStep, setSimulationStep] = useState<SimulationStep>('idle');
+
+  // Active farm: seeded from primaryFarm, updated when the user switches via FarmSwitcher
+  const [activeFarm, setActiveFarm] = useState<Farm | null>(null);
+  const [taskAdvisory, setTaskAdvisory] = useState<Advisory | null>(null);
 
   const [climateData, setClimateData] = useState<ClimateData | null>(null);
   const [soilData, setSoilData] = useState<SoilData | null>(null);
   const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
-  const [results, setResults] = useState<SimulationResult | null>(null);
-  const [showResults, setShowResults] = useState(false);
 
   const [airQualityData, setAirQualityData] = useState<AirQualityData | null>(null);
   const [climateTrends, setClimateTrends] = useState<ClimateTrendsData | null>(null);
@@ -105,11 +107,6 @@ function Home() {
   const [liveFetchedAt, setLiveFetchedAt] = useState<{ aq?: number; climate?: number }>({});
   const [isRefreshingLive, setIsRefreshingLive] = useState(false);
 
-  const [cropSuggestions, setCropSuggestions] = useState<
-    { crop: CropInfo; score: number; reasons: string[]; circular?: CircularOpportunity }[]
-  >([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [currentSeason, setCurrentSeason] = useState('');
   const [demandMatches, setDemandMatches] = useState<NearbyDemandRow[]>([]);
   const [mandiSeries, setMandiSeries] = useState<MandiPriceSeries | null>(null);
 
@@ -184,16 +181,11 @@ function Home() {
   const handlePositionChange = useCallback(
     (lat: number, lng: number) => {
       setPosition({ lat, lng });
-      setShowResults(false);
-      setResults(null);
       setClimateData(null);
       setSoilData(null);
       setLiveFetchedAt({});
-      setShowSuggestions(false);
-      setCropSuggestions([]);
       setDemandMatches([]);
       setMandiSeries(null);
-      setSimulationStep('idle');
 
       fetchLocationInfo(lat, lng)
         .then((info) => {
@@ -237,13 +229,13 @@ function Home() {
     refetchIfs();
   }, [refetchNeighbours, refetchIfs]);
 
-  // Start the dashboard on the farmer's primary farm (once), and pre-fill the
-  // simulator with that farm's primary crop.
+  // Start the dashboard on the farmer's primary farm (once).
   const seededPinRef = useRef(false);
   useEffect(() => {
     if (seededPinRef.current || position || !primaryFarm) return;
     seededPinRef.current = true;
     handlePositionChange(primaryFarm.lat, primaryFarm.lng);
+    setActiveFarm(primaryFarm);
     const primaryCrop = primaryFarm.crops?.[0] ?? primaryFarm.primary_crop;
     if (primaryCrop) setSelectedCrop(primaryCrop);
   }, [primaryFarm, position, handlePositionChange]);
@@ -300,121 +292,58 @@ function Home() {
     [position, plantingDate],
   );
 
-  const handleSimulate = async () => {
-    if (!position || !selectedCrop || !plantingDate) {
-      toast.error('Please complete all fields before simulating');
-      return;
-    }
+  // ── Farm season: crop cycle, events, timeline, projection, advisories ──────
+  const activeRole = activeFarm?.member_role ?? 'owner';
+  const { activeCycle, events: cycleEvents, reload: reloadSeason } = useFarmSeason(
+    activeFarm?.id ?? null,
+  );
 
-    setIsSimulating(true);
-    setShowResults(false);
-    setResults(null);
-    setShowSuggestions(false);
-    setSimulationStep('locating');
+  const timeline = useMemo(
+    () =>
+      activeCycle
+        ? buildCropTimeline(activeCycle.crop, new Date(activeCycle.sowing_date), {
+            harvestDate: activeCycle.actual_harvest_date
+              ? new Date(activeCycle.actual_harvest_date)
+              : null,
+          })
+        : null,
+    [activeCycle],
+  );
 
+  const projection = useMemo(() => {
+    if (!activeCycle || !climateData || !soilData || !locationInfo || !position) return null;
+    const key = activeCycle.crop.toLowerCase();
+    if (!CROP_DATABASE[key]) return null;
     try {
-      setSimulationStep('climate');
-      const cropKey = selectedCrop.toLowerCase();
-      const cropGrowingDays = CROP_DATABASE[cropKey]?.growingDays || 100;
-
-      const [locInfo, climate, soil] = await Promise.all([
-        locationInfo
-          ? Promise.resolve(locationInfo)
-          : fetchLocationInfo(position.lat, position.lng),
-        fetchClimateData(position.lat, position.lng, plantingDate, cropGrowingDays),
-        fetchSoilData(position.lat, position.lng),
-      ]);
-
-      if (!locationInfo) setLocationInfo(locInfo);
-      setClimateData(climate);
-      setSoilData(soil);
-
-      // Market signals (India pins only — rates are INR, matching exchangeRate).
-      let marketOverride:
-        | { pricePerTon: number; buyerName: string; distanceKm: number }
-        | undefined;
-      let mandiRef: { pricePerTon: number; trendPct: number } | undefined;
-      let demandRows: NearbyDemandRow[] = [];
-      let series: MandiPriceSeries | null = null;
-      if (locInfo.countryCode === 'IN') {
-        series = await fetchMandiPrices(selectedCrop, { state: 'Karnataka' });
-        if (series) mandiRef = { pricePerTon: series.latestPerTon, trendPct: series.trendPct };
-
-        const saleCategory = CROP_TO_SALE_CATEGORY[selectedCrop.toLowerCase()];
-        if (saleCategory) {
-          try {
-            demandRows = await nearbyDemandListings(
-              position.lat,
-              position.lng,
-              saleCategory,
-              100000,
-            );
-            for (const d of demandRows) {
-              const perTon = demandRatePerTon(d.rate, d.unit);
-              if (perTon) {
-                marketOverride = {
-                  pricePerTon: perTon,
-                  buyerName: d.buyer_name,
-                  distanceKm: Math.round(((d.distance_m ?? 0) / 1000) * 10) / 10,
-                };
-                break;
-              }
-            }
-          } catch {
-            /* silent — fall back to reference/mandi price */
-          }
-        }
-      }
-      setDemandMatches(demandRows);
-      setMandiSeries(series);
-
-      setSimulationStep('calculating');
-      const hectares = areaUnit === 'acres' ? areaHectares * 0.404686 : areaHectares;
-      const calculatedResults = calculateYield(
-        selectedCrop,
-        plantingDate,
-        climate,
-        soil,
+      return calculateYield(
+        activeCycle.crop,
+        new Date(activeCycle.sowing_date),
+        climateData,
+        soilData,
         position.lat,
-        locInfo.exchangeRate,
-        hectares,
-        marketOverride,
-        mandiRef,
+        locationInfo.exchangeRate,
+        activeCycle.area_hectares,
       );
-      setResults(calculatedResults);
-
-      const season = getSeason(plantingDate, position.lat);
-      setCurrentSeason(season);
-      const suggestions = suggestCropsWithCircular(
-        climate,
-        soil,
-        plantingDate,
-        position.lat,
-        neighbours,
-      );
-      setCropSuggestions(suggestions);
-
-      setSimulationStep('complete');
-
-      setTimeout(() => {
-        setShowResults(true);
-        setShowSuggestions(true);
-      }, 400);
-
-      toast.success('Simulation completed successfully!');
-    } catch (error) {
-      setSimulationStep('error');
-      toast.error('Failed to complete simulation. Please try again.');
-      console.error('Simulation error:', error);
-    } finally {
-      setIsSimulating(false);
+    } catch {
+      return null;
     }
-  };
+  }, [activeCycle, climateData, soilData, locationInfo, position]);
 
-  const handleSuggestionSelect = (cropName: string) => {
-    setSelectedCrop(cropName);
-    toast.success(`Selected ${cropName} — click Simulate to see results`);
-  };
+  const advisoryList = useMemo(() => {
+    if (!activeCycle) return [];
+    const crop = CROP_DATABASE[activeCycle.crop.toLowerCase()];
+    if (!crop) return [];
+    return cropAdvisories({
+      cropName: activeCycle.crop,
+      crop,
+      sowingDate: new Date(activeCycle.sowing_date),
+      climate: climateData,
+      soil: soilData,
+      airQuality: airQualityData,
+      yieldWarnings: projection?.warnings ?? [],
+    });
+  }, [activeCycle, climateData, soilData, airQualityData, projection]);
+
 
   const tempChartData = useMemo(() => {
     if (!climateTrends?.daily?.time) return [];
@@ -441,15 +370,16 @@ function Home() {
   }, [airQualityData]);
 
   const cropContext = useMemo(() => {
-    if (!results || !selectedCrop || !plantingDate) return null;
+    // Prefer active cycle data; fall back to undefined (assistant handles nulls).
+    if (!activeCycle) return null;
     return {
-      crop: selectedCrop,
-      plantingDate: plantingDate.toISOString().split('T')[0],
-      yieldEstimate: results.yield,
-      viabilityScore: results.viabilityScore,
-      profit: results.profit,
+      crop: activeCycle.crop,
+      plantingDate: activeCycle.sowing_date,
+      yieldEstimate: projection?.yield,
+      viabilityScore: projection?.viabilityScore,
+      profit: projection?.profit,
     };
-  }, [results, selectedCrop, plantingDate]);
+  }, [activeCycle, projection]);
 
   // Always-present, refreshed context for the chat assistant — the current pin's
   // environment snapshot, the ranked suggestions, and nearby buyer demand.
@@ -483,32 +413,17 @@ function Home() {
   );
 
   const riskBriefContext: RiskBriefContext | null = useMemo(() => {
-    if (!results || !selectedCrop || !plantingDate || !position || !showResults) return null;
+    if (!activeCycle || !projection || !position) return null;
     return {
       lat: position.lat,
       lng: position.lng,
-      crop: selectedCrop,
-      plantingDate: plantingDate.toISOString().split('T')[0],
-      yieldEstimate: results.yield,
-      viabilityScore: results.viabilityScore,
-      profit: results.profit,
+      crop: activeCycle.crop,
+      plantingDate: activeCycle.sowing_date,
+      yieldEstimate: projection.yield,
+      viabilityScore: projection.viabilityScore,
+      profit: projection.profit,
     };
-  }, [results, selectedCrop, plantingDate, position, showResults]);
-
-  // Time-sensitive paddy advisories (v1 scope: paddy only). Derived from data
-  // already fetched — no new endpoints.
-  const paddyAdvisoryList = useMemo(() => {
-    if (selectedCrop !== 'Rice' || !plantingDate) return [];
-    const crop = CROP_DATABASE.rice;
-    return paddyAdvisories({
-      plantingDate,
-      crop,
-      climate: climateData,
-      soil: soilData,
-      airQuality: airQualityData,
-      yieldWarnings: results?.warnings ?? [],
-    });
-  }, [selectedCrop, plantingDate, climateData, soilData, airQualityData, results]);
+  }, [activeCycle, projection, position]);
 
   // Feed the current pin / crop result / environment snapshot to the global assistant.
   useAssistantPageContext({ position, cropContext, assistantContext });
@@ -523,6 +438,7 @@ function Home() {
 
   const canSimulate = position && selectedCrop && plantingDate;
   const completedCount = [!!position, !!selectedCrop, !!plantingDate].filter(Boolean).length;
+
 
   return (
     <div className="min-h-screen bg-background relative">
@@ -578,7 +494,30 @@ function Home() {
               initialView={mapInitialView}
               heightClass="h-[460px]"
             />
-            <FarmSwitcher onPick={handlePositionChange} onFarmsChanged={onFarmsChanged} />
+            <FarmSwitcher
+              onPick={handlePositionChange}
+              onSelect={(f) => setActiveFarm(f)}
+              onFarmsChanged={onFarmsChanged}
+            />
+
+            {/* Team & tasks (Owner/Manager only) */}
+            {activeRole !== 'worker' && (
+              <Link
+                to="/farm/team"
+                className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card p-4 hover:border-primary/40 transition-colors group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <ClipboardList className="w-5 h-5 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-foreground">Team &amp; tasks</p>
+                  <p className="text-xs text-muted-foreground">
+                    Manage farm members and assign tasks
+                  </p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground ml-auto shrink-0 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            )}
 
             {/* Saath CTA */}
             <Link
@@ -822,202 +761,106 @@ function Home() {
             )}
           </div>
 
-          {/* RIGHT — crop yield simulator */}
+          {/* RIGHT — active crop season */}
           <div className="space-y-6">
-            <motion.div
-              className="bg-card rounded-2xl p-6 sm:p-7 shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.15)] border border-border/60"
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-            >
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-xl font-bold text-foreground">Crop yield simulator</h3>
-                <span className="text-xs font-mono text-muted-foreground bg-muted/40 px-2 py-1 rounded-md">
-                  {completedCount}/3
-                </span>
-              </div>
+            <MyTasksCard compact={activeRole !== 'worker'} />
 
-              <div className="w-full h-1 bg-muted/50 rounded-full mb-5 overflow-hidden">
-                <motion.div
-                  className="h-full bg-primary rounded-full"
-                  animate={{ width: `${(completedCount / 3) * 100}%` }}
-                  transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                />
-              </div>
-
-              {locationInfo && (
-                <div className="mb-4 flex items-center gap-2 px-3 py-2.5 bg-primary/5 dark:bg-primary/10 rounded-xl border border-primary/10">
-                  <Globe className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">{locationInfo.country}</span>
-                  <span className="text-xs text-muted-foreground ml-auto font-mono bg-muted/30 px-2 py-0.5 rounded">
-                    {locationInfo.currencySymbol} {locationInfo.currencyCode}
-                  </span>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Planting Date
-                  </label>
-                  <DateSelector date={plantingDate} onDateChange={setPlantingDate} />
-                  {position && climateData && soilData && !plantingDate && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Pick a planting date to see crop suggestions for this spot.
-                    </p>
-                  )}
-                </div>
-
-                <CropSuggestions
-                  suggestions={autoSuggestions}
-                  season={suggestionSeason}
-                  plantingDate={plantingDate}
-                  lat={position?.lat}
-                  selectedCrop={selectedCrop}
-                  onSelectCrop={handleSuggestionSelect}
-                  show={autoSuggestions.length > 0}
-                  variant="panel"
-                />
-
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Crop Type
-                  </label>
-                  <CropSelector selectedCrop={selectedCrop} onCropChange={setSelectedCrop} />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <Tractor className="w-3.5 h-3.5 text-primary" />
-                    Planting Area
-                  </label>
-                  <div className="flex gap-2 mt-2">
-                    <input
-                      type="number"
-                      min="0.1"
-                      step="0.1"
-                      value={areaHectares}
-                      onChange={(e) => setAreaHectares(Math.max(0.1, parseFloat(e.target.value) || 1))}
-                      className="flex-1 h-12 rounded-xl border border-border/60 bg-card px-4 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-                    />
-                    <div className="flex rounded-xl border border-border/60 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => setAreaUnit('hectares')}
-                        className={`px-3.5 text-sm font-semibold transition-all ${
-                          areaUnit === 'hectares'
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-card text-muted-foreground hover:bg-muted/30'
-                        }`}
-                      >
-                        ha
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAreaUnit('acres')}
-                        className={`px-3.5 text-sm font-semibold transition-all ${
-                          areaUnit === 'acres'
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-card text-muted-foreground hover:bg-muted/30'
-                        }`}
-                      >
-                        ac
-                      </button>
+            {!activeCycle ? (
+              // No active cycle
+              activeRole === 'worker' ? (
+                <p className="text-sm text-muted-foreground bg-card rounded-2xl p-6 border border-border/60">
+                  Your farm manager hasn't started a crop cycle yet.
+                </p>
+              ) : (
+                <>
+                  <motion.div
+                    className="bg-card rounded-2xl p-6 sm:p-7 shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.15)] border border-border/60"
+                    initial={{ opacity: 0, x: 16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.4, delay: 0.1 }}
+                  >
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
+                        <Leaf className="w-4 h-4 text-primary" />
+                      </div>
+                      <h3 className="text-lg font-bold text-foreground">Start this season</h3>
                     </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1.5 font-mono">
-                    {areaUnit === 'acres'
-                      ? `≈ ${(areaHectares * 0.404686).toFixed(2)} hectares`
-                      : `≈ ${(areaHectares * 2.47105).toFixed(2)} acres`}
-                  </p>
-                </div>
+                    <p className="text-sm text-muted-foreground mb-5">
+                      Record your crop, sowing date and area once — the dashboard will track the stage
+                      calendar, advisories and yield projection automatically.
+                    </p>
+                    {activeFarm ? (
+                      <AddCycleDialog farm={activeFarm} onCreated={reloadSeason} />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Loading your farm…</p>
+                    )}
+                  </motion.div>
 
-                <Button
-                  onClick={handleSimulate}
-                  disabled={!canSimulate || isSimulating}
-                  className="w-full h-14 text-base font-bold mt-4 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all active:scale-[0.98] rounded-xl group disabled:opacity-40"
-                  size="lg"
-                >
-                  {isSimulating ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-3" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      Run Simulation
-                      <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-0.5 transition-transform" />
-                    </>
-                  )}
-                </Button>
+                  {/* Crop suggestions while no cycle is active */}
+                  <CropSuggestions
+                    suggestions={autoSuggestions}
+                    season={suggestionSeason}
+                    plantingDate={plantingDate}
+                    lat={position?.lat}
+                    selectedCrop={selectedCrop}
+                    onSelectCrop={(crop) => setSelectedCrop(crop)}
+                    show={autoSuggestions.length > 0}
+                    variant="panel"
+                  />
+                </>
+              )
+            ) : (
 
-                {!canSimulate && !isSimulating && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    {!position ? 'Loading your farm…' : !selectedCrop ? 'Select a crop type above' : 'Pick a planting date'}
-                  </p>
-                )}
-              </div>
-            </motion.div>
-
-            <SimulationStatus currentStep={simulationStep} isVisible={simulationStep !== 'idle'} />
-
-            {results && (
+              // Active cycle — show calendar, log, advisories, projection
               <>
-                <FinancialResults
-                  yield={results.yield}
-                  pricePerUnit={results.pricePerUnit}
-                  profit={results.profit}
-                  show={showResults}
-                  currencySymbol={locationInfo?.currencySymbol || '$'}
-                  currencyCode={locationInfo?.currencyCode || 'USD'}
-                  harvestDate={results.harvestDate}
-                  growingDays={results.growingDays}
-                  grossRevenue={results.grossRevenue}
-                  totalCosts={results.totalCosts}
-                  areaHectares={results.areaHectares}
-                  warnings={results.warnings}
-                  viabilityScore={results.viabilityScore}
-                  priceSource={results.priceSource}
-                  buyerName={results.buyerName}
-                  buyerDistanceKm={results.buyerDistanceKm}
-                  mandiTrendPct={results.mandiTrendPct}
+                {timeline && (
+                  <CropCalendar
+                    timeline={timeline}
+                    events={cycleEvents}
+                    readOnly={activeRole === 'worker'}
+                  />
+                )}
+
+                <FarmLog
+                  farmId={activeFarm!.id}
+                  cycleId={activeCycle.id}
+                  events={cycleEvents}
+                  onChange={reloadSeason}
+                  readOnly={activeRole === 'worker'}
                 />
-                {showResults && <EnvironmentalOutlook context={riskBriefContext} />}
-                {showResults && selectedCrop === 'Rice' && plantingDate && (
-                  <AdvisoryCard advisories={paddyAdvisoryList} />
+
+                <AdvisoryCard
+                  advisories={advisoryList}
+                  onMakeTask={activeRole !== 'worker' ? setTaskAdvisory : undefined}
+                />
+
+                {activeRole !== 'worker' && riskBriefContext && <EnvironmentalOutlook context={riskBriefContext} />}
+
+                {activeRole !== 'worker' && projection && (
+                  <YieldProjectionCard
+                    projection={projection}
+                    cycle={activeCycle}
+                    onRerun={() => {
+                      if (position) loadEnvData(position.lat, position.lng);
+                    }}
+                    currencySymbol={locationInfo?.currencySymbol ?? '₹'}
+                    currencyCode={locationInfo?.currencyCode ?? 'INR'}
+                  />
                 )}
               </>
-            )}
-
-            <CropSuggestions
-              suggestions={cropSuggestions}
-              season={currentSeason}
-              plantingDate={plantingDate}
-              lat={position?.lat}
-              selectedCrop={selectedCrop}
-              onSelectCrop={handleSuggestionSelect}
-              show={showSuggestions}
-              variant="results"
-            />
-
-            {results && showResults && position && (
-              <MarketSignal
-                crop={selectedCrop}
-                harvestDate={results.harvestDate}
-                lat={position.lat}
-                priceSource={results.priceSource}
-                pricePerUnit={results.pricePerUnit}
-                referencePricePerUnit={results.referencePricePerUnit}
-                mandiTrendPct={results.mandiTrendPct}
-                mandiSeries={mandiSeries}
-                currencySymbol={locationInfo?.currencySymbol || '$'}
-                show
-              />
             )}
           </div>
         </div>
 
+        {activeFarm && activeCycle && (
+          <AdvisoryTaskDialog
+            advisory={taskAdvisory}
+            farmId={activeFarm.id}
+            cycleId={activeCycle.id}
+            onClose={() => setTaskAdvisory(null)}
+            onCreated={() => {}}
+          />
+        )}
       </main>
 
       <footer className="border-t border-border/30 py-6 px-6">

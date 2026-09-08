@@ -10,6 +10,8 @@ import { GlobalAssistant } from '@/components/assistant/GlobalAssistant';
 import { RequireOnboarding } from './RequireOnboarding';
 
 const SaathApp = lazy(() => import('@/components/saath/SaathApp'));
+const TeamPanel = lazy(() => import('@/components/farm/TeamPanel'));
+const JoinFarm = lazy(() => import('@/components/farm/JoinFarm'));
 
 /** `/add-farm/:farmId` — the add-farm wizard prefilled to edit an existing farm. */
 function EditFarmRoute() {
@@ -21,6 +23,8 @@ function EditFarmRoute() {
  * Everything below the auth boundary. Signed-out users are bounced to /sign-in;
  * signed-in users get their farmer identity + the onboarding gate, then the app.
  * `SaathApp` stays lazy so its map / realtime deps stay out of the `/` chunk.
+ * `/join` is outside RequireOnboarding so workers can redeem invites before
+ * completing their profile.
  */
 export function RootGate() {
   return (
@@ -30,27 +34,52 @@ export function RootGate() {
       </SignedOut>
       <SignedIn>
         <IdentityProvider>
-          <RequireOnboarding>
-            <AssistantProvider>
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/add-farm" element={<Onboarding mode="add-farm" />} />
-                <Route path="/add-farm/:farmId" element={<EditFarmRoute />} />
-                <Route
-                  path="/saath/*"
-                  element={
-                    <Suspense fallback={<BrandSplash label="Loading Saath…" />}>
-                      <SaathApp />
-                    </Suspense>
-                  }
-                />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-              <GlobalAssistant />
-            </AssistantProvider>
-          </RequireOnboarding>
+          <Routes>
+            {/* /join is accessible before onboarding is complete */}
+            <Route
+              path="/join"
+              element={
+                <Suspense fallback={<BrandSplash label="Loading…" />}>
+                  <JoinFarm />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/*"
+              element={
+                <RequireOnboarding>
+                  <AssistantProvider>
+                    <Routes>
+                      <Route path="/" element={<Home />} />
+                      <Route path="/add-farm" element={<Onboarding mode="add-farm" />} />
+                      <Route path="/add-farm/:farmId" element={<EditFarmRoute />} />
+                      <Route
+                        path="/farm/team"
+                        element={
+                          <Suspense fallback={<BrandSplash label="Loading team…" />}>
+                            <TeamPanel />
+                          </Suspense>
+                        }
+                      />
+                      <Route
+                        path="/saath/*"
+                        element={
+                          <Suspense fallback={<BrandSplash label="Loading Saath…" />}>
+                            <SaathApp />
+                          </Suspense>
+                        }
+                      />
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                    <GlobalAssistant />
+                  </AssistantProvider>
+                </RequireOnboarding>
+              }
+            />
+          </Routes>
         </IdentityProvider>
       </SignedIn>
     </>
   );
 }
+
