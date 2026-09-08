@@ -71,6 +71,9 @@ export interface NewProfileWithFarm {
   lat: number;
   lng: number;
   farmLabel?: string | null;
+  /** Ordered crop display names; first = primary. */
+  crops?: string[];
+  primaryCrop?: string | null;
 }
 
 export async function createProfileWithFarm(p: NewProfileWithFarm): Promise<Farmer> {
@@ -87,6 +90,8 @@ export async function createProfileWithFarm(p: NewProfileWithFarm): Promise<Farm
       p_lat: p.lat,
       p_lng: p.lng,
       p_farm_label: p.farmLabel ?? null,
+      p_crops: p.crops ?? [],
+      p_primary_crop: p.primaryCrop ?? null,
     }),
   );
 }
@@ -101,6 +106,9 @@ export async function addFarm(f: {
   lat: number;
   lng: number;
   makePrimary?: boolean;
+  enterprises?: string[];
+  crops?: string[];
+  primaryCrop?: string | null;
 }): Promise<Farm> {
   const sb = requireSupabase();
   return unwrap(
@@ -109,6 +117,9 @@ export async function addFarm(f: {
       p_lat: f.lat,
       p_lng: f.lng,
       p_make_primary: f.makePrimary ?? false,
+      p_enterprises: f.enterprises ?? [],
+      p_crops: f.crops ?? [],
+      p_primary_crop: f.primaryCrop ?? null,
     }),
   );
 }
@@ -121,6 +132,32 @@ export async function updateFarmLocation(
   const sb = requireSupabase();
   await unwrap(
     await sb.rpc('update_farm_location', { p_farm_id: farmId, p_lat: lat, p_lng: lng }),
+  );
+}
+
+/** Update a farm's pin, name, crops and enterprises in one call (the /add-farm
+ *  edit flow). Returns void — the RPC's raw `farms` row carries a geography
+ *  `location`, not lat/lng; callers refresh identity instead. */
+export async function updateFarmDetails(f: {
+  farmId: string;
+  lat: number;
+  lng: number;
+  label: string;
+  enterprises?: string[];
+  crops?: string[];
+  primaryCrop?: string | null;
+}): Promise<void> {
+  const sb = requireSupabase();
+  await unwrap(
+    await sb.rpc('update_farm_details', {
+      p_farm_id: f.farmId,
+      p_lat: f.lat,
+      p_lng: f.lng,
+      p_label: f.label,
+      p_enterprises: f.enterprises ?? [],
+      p_crops: f.crops ?? [],
+      p_primary_crop: f.primaryCrop ?? null,
+    }),
   );
 }
 

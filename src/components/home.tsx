@@ -88,7 +88,6 @@ function Home() {
   const [areaHectares, setAreaHectares] = useState<number>(1);
   const [areaUnit, setAreaUnit] = useState<'hectares' | 'acres'>('hectares');
   const [isSimulating, setIsSimulating] = useState(false);
-  const [isGeolocating, setIsGeolocating] = useState(false);
   const [simulationStep, setSimulationStep] = useState<SimulationStep>('idle');
 
   const [climateData, setClimateData] = useState<ClimateData | null>(null);
@@ -208,23 +207,6 @@ function Home() {
     [loadEnvData],
   );
 
-  const handleGeolocation = () => {
-    setIsGeolocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        handlePositionChange(latitude, longitude);
-        setIsGeolocating(false);
-        toast.success('Location detected successfully!');
-      },
-      (error) => {
-        setIsGeolocating(false);
-        toast.error('Unable to get your location. Please enable location permissions.');
-        console.error('Geolocation error:', error);
-      },
-    );
-  };
-
   const refetchNeighbours = useCallback(() => {
     if (!farmerId) {
       setNeighbours([]);
@@ -255,12 +237,15 @@ function Home() {
     refetchIfs();
   }, [refetchNeighbours, refetchIfs]);
 
-  // Start the pin on the farmer's primary farm (once).
+  // Start the dashboard on the farmer's primary farm (once), and pre-fill the
+  // simulator with that farm's primary crop.
   const seededPinRef = useRef(false);
   useEffect(() => {
     if (seededPinRef.current || position || !primaryFarm) return;
     seededPinRef.current = true;
     handlePositionChange(primaryFarm.lat, primaryFarm.lng);
+    const primaryCrop = primaryFarm.crops?.[0] ?? primaryFarm.primary_crop;
+    if (primaryCrop) setSelectedCrop(primaryCrop);
   }, [primaryFarm, position, handlePositionChange]);
 
   const mapInitialView = useMemo(
@@ -563,7 +548,7 @@ function Home() {
 
             <div className="flex items-center gap-2 flex-wrap">
               {[
-                { on: !!position, icon: MapPin, label: position ? 'Pin dropped' : 'Drop a pin' },
+                { on: !!position, icon: MapPin, label: position ? 'Farm loaded' : 'Loading farm…' },
                 { on: !!selectedCrop, icon: Leaf, label: selectedCrop || 'Select crop' },
                 { on: !!plantingDate, icon: Sparkles, label: plantingDate ? 'Date set' : 'Pick date' },
               ].map((p, i) => (
@@ -586,9 +571,6 @@ function Home() {
           <div className="space-y-6">
             <MapView
               value={position}
-              onChange={handlePositionChange}
-              onGeolocate={handleGeolocation}
-              isGeolocating={isGeolocating}
               locationLabel={locationInfo?.country}
               neighbours={neighbours}
               onNeighbourClick={(id) => navigate(`/saath/profile/${id}`)}
@@ -596,7 +578,7 @@ function Home() {
               initialView={mapInitialView}
               heightClass="h-[460px]"
             />
-            <FarmSwitcher pin={position} onPick={handlePositionChange} onFarmsChanged={onFarmsChanged} />
+            <FarmSwitcher onPick={handlePositionChange} onFarmsChanged={onFarmsChanged} />
 
             {/* Saath CTA */}
             <Link
@@ -620,10 +602,10 @@ function Home() {
             {!position && (
               <div className="bg-card border border-border/60 rounded-2xl p-8 text-center shadow-sm">
                 <MapPin className="w-8 h-8 text-primary mx-auto mb-3 opacity-60" />
-                <h3 className="text-lg font-bold text-foreground mb-1">Pick a location</h3>
+                <h3 className="text-lg font-bold text-foreground mb-1">Loading your farm…</h3>
                 <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                  Click the map or use “My location” to load soil, air quality and 5-year climate
-                  trends for that spot.
+                  Fetching soil, air quality and 5-year climate trends for your registered
+                  farm. Switch farms or add a new one from the selector above.
                 </p>
               </div>
             )}
@@ -972,7 +954,7 @@ function Home() {
 
                 {!canSimulate && !isSimulating && (
                   <p className="text-xs text-muted-foreground text-center">
-                    {!position ? 'Drop a pin on the map to start' : !selectedCrop ? 'Select a crop type above' : 'Pick a planting date'}
+                    {!position ? 'Loading your farm…' : !selectedCrop ? 'Select a crop type above' : 'Pick a planting date'}
                   </p>
                 )}
               </div>

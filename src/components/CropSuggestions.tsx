@@ -26,6 +26,9 @@ interface CropSuggestionsProps {
   plantingDate?: Date;
   lat?: number;
   selectedCrop?: string;
+  /** Multi-select: highlight every crop in this list (onboarding). Takes
+   *  precedence over `selectedCrop` when provided. */
+  selectedCrops?: string[];
   onSelectCrop?: (cropName: string) => void;
   show: boolean;
   /** 'panel' = compact, lives in the simulator card before a run.
@@ -60,6 +63,7 @@ export function CropSuggestions({
   plantingDate,
   lat,
   selectedCrop,
+  selectedCrops,
   onSelectCrop,
   show,
   variant = 'results',
@@ -92,9 +96,12 @@ export function CropSuggestions({
 
       <div className={isPanel ? 'space-y-2' : 'space-y-3'}>
         {suggestions.map((suggestion, index) => {
-          const isSelected =
-            !!selectedCrop &&
-            selectedCrop.toLowerCase() === suggestion.crop.name.toLowerCase();
+          const isSelected = selectedCrops
+            ? selectedCrops.some(
+                (c) => c.toLowerCase() === suggestion.crop.name.toLowerCase(),
+              )
+            : !!selectedCrop &&
+              selectedCrop.toLowerCase() === suggestion.crop.name.toLowerCase();
           const harvest =
             plantingDate ? calculateHarvestDate(plantingDate, suggestion.crop.name) : null;
           const seasonFits =
@@ -102,14 +109,23 @@ export function CropSuggestions({
               ? suggestion.crop.seasons.includes(getSeason(plantingDate, lat))
               : null;
 
+          const interactive = !!onSelectCrop;
+          const Row: 'button' | 'div' = interactive ? 'button' : 'div';
+
           return (
-            <button
+            <Row
               key={suggestion.crop.name}
-              onClick={() => onSelectCrop?.(suggestion.crop.name)}
-              className={`w-full text-left bg-card/70 dark:bg-card/50 hover:bg-card dark:hover:bg-card/80 rounded-lg p-4 border transition-all group animate-in fade-in slide-in-from-left-4 duration-300 ${
+              {...(interactive
+                ? { onClick: () => onSelectCrop?.(suggestion.crop.name) }
+                : {})}
+              className={`w-full text-left bg-card/70 dark:bg-card/50 rounded-lg p-4 border transition-all group animate-in fade-in slide-in-from-left-4 duration-300 ${
+                interactive ? 'hover:bg-card dark:hover:bg-card/80' : ''
+              } ${
                 isSelected
                   ? 'border-primary ring-2 ring-primary/30'
-                  : 'border-border/40 hover:border-primary/30'
+                  : interactive
+                    ? 'border-border/40 hover:border-primary/30'
+                    : 'border-border/40'
               }`}
               style={{ animationDelay: `${index * 80}ms` }}
             >
@@ -143,7 +159,9 @@ export function CropSuggestions({
                       {getScoreLabel(suggestion.score)} ({Math.round(suggestion.score)}%)
                     </span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  {interactive && (
+                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  )}
                 </div>
               </div>
 
@@ -207,7 +225,7 @@ export function CropSuggestions({
                   </span>
                 </div>
               )}
-            </button>
+            </Row>
           );
         })}
       </div>
