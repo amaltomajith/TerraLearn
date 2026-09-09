@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Sprout, Sun, Moon } from 'lucide-react';
+import { Sprout, Sun, Moon, GitBranch } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { useTheme } from './ThemeProvider';
 import { motion } from 'framer-motion';
@@ -33,6 +33,12 @@ export function Navigation({ authSlot }: { authSlot?: ReactNode }) {
           <div className="hidden sm:flex items-center gap-4 pl-2">
             <NavLink to="/" end className={linkClass}>
               Home
+            </NavLink>
+            <NavLink to="/cascade" className={linkClass}>
+              <span className="flex items-center gap-1.5">
+                <GitBranch className="w-3.5 h-3.5" />
+                Cascade
+              </span>
             </NavLink>
             <NavLink to="/saath" className={linkClass}>
               Saath

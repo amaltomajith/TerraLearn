@@ -144,4 +144,10 @@ grant select, insert, update, delete on farm_events to authenticated;
 
 -- Realtime: the log refreshes across a farmer's own tabs / between owner and
 -- worker. RLS still scopes rows to farm members.
-alter publication supabase_realtime add table farm_events;
+do $$
+begin
+  alter publication supabase_realtime add table farm_events;
+exception when duplicate_object then
+  null;
+end;
+$$;
