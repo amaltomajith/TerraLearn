@@ -5,6 +5,7 @@ import { Navigation } from './Navigation';
 import NavAuthControl from './saath/NavAuthControl';
 import { MapView, type IfsConnection } from './MapView';
 import { FarmSwitcher } from './FarmSwitcher';
+import { useTranslation } from '@/lib/i18n/I18nProvider';
 import { useAssistantPageContext } from '@/lib/assistant/useAssistantPageContext';
 import type { AssistantExtraContext } from '@/lib/assistant/types';
 import { useIdentity } from '@/lib/identity/identity';
@@ -84,6 +85,7 @@ import { toast } from 'sonner';
 function Home() {
   const navigate = useNavigate();
   const { activeFarmerId: farmerId, primaryFarm } = useIdentity();
+  const { t } = useTranslation();
 
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [neighbours, setNeighbours] = useState<MapPointRow[]>([]);
@@ -455,19 +457,18 @@ function Home() {
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
             <div>
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-foreground mb-2 leading-[1.1] tracking-tight">
-                Your farm, <span className="text-primary">at a glance</span>
+                {t('dashboard_title_prefix')}<span className="text-primary">{t('dashboard_title_highlight')}</span>
               </h2>
               <p className="text-sm sm:text-base text-muted-foreground max-w-xl font-medium leading-relaxed">
-                Soil, air quality and 5-year climate trends for your land, plus the farmers around
-                you — powered by Open-Meteo, SoilGrids &amp; the Saath network.
+                {t('dashboard_subtitle')}
               </p>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
               {[
-                { on: !!position, icon: MapPin, label: position ? 'Farm loaded' : 'Loading farm…' },
-                { on: !!selectedCrop, icon: Leaf, label: selectedCrop || 'Select crop' },
-                { on: !!plantingDate, icon: Sparkles, label: plantingDate ? 'Date set' : 'Pick date' },
+                { on: !!position, icon: MapPin, label: position ? t('status_farm_loaded') : t('status_loading_farm') },
+                { on: !!selectedCrop, icon: Leaf, label: selectedCrop || t('status_select_crop') },
+                { on: !!plantingDate, icon: Sparkles, label: plantingDate ? t('status_date_set') : t('status_pick_date') },
               ].map((p, i) => (
                 <div
                   key={i}
@@ -511,9 +512,9 @@ function Home() {
                   <ClipboardList className="w-5 h-5 text-primary" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-foreground">Team &amp; tasks</p>
+                  <p className="text-sm font-bold text-foreground">{t('card_team_tasks')}</p>
                   <p className="text-xs text-muted-foreground">
-                    Manage farm members and assign tasks
+                    {t('card_team_tasks_desc')}
                   </p>
                 </div>
                 <ArrowRight className="w-4 h-4 text-muted-foreground ml-auto shrink-0 group-hover:translate-x-0.5 transition-transform" />
@@ -529,11 +530,11 @@ function Home() {
                 <Users className="w-5 h-5 text-primary" />
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-bold text-foreground">Saath network</p>
+                <p className="text-sm font-bold text-foreground">{t('card_saath_network')}</p>
                 <p className="text-xs text-muted-foreground">
                   {neighbours.length > 0
                     ? `Trade resources, close IFS loops with ${neighbours.length} farmers & buyers nearby`
-                    : 'Trade resources and close circular-agriculture loops with nearby farmers'}
+                    : t('card_saath_network_desc')}
                 </p>
               </div>
               <ArrowRight className="w-4 h-4 text-muted-foreground ml-auto shrink-0 group-hover:translate-x-0.5 transition-transform" />
@@ -542,10 +543,9 @@ function Home() {
             {!position && (
               <div className="bg-card border border-border/60 rounded-2xl p-8 text-center shadow-sm">
                 <MapPin className="w-8 h-8 text-primary mx-auto mb-3 opacity-60" />
-                <h3 className="text-lg font-bold text-foreground mb-1">Loading your farm…</h3>
+                <h3 className="text-lg font-bold text-foreground mb-1">{t('loading_farm_banner_title')}</h3>
                 <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                  Fetching soil, air quality and 5-year climate trends for your registered
-                  farm. Switch farms or add a new one from the selector above.
+                  {t('loading_farm_banner_desc')}
                 </p>
               </div>
             )}
@@ -555,7 +555,7 @@ function Home() {
                 <div className="flex items-center gap-3">
                   <AlertTriangle className="w-6 h-6 text-destructive shrink-0" />
                   <div>
-                    <h4 className="text-sm font-bold text-destructive">Failed to load environmental data</h4>
+                    <h4 className="text-sm font-bold text-destructive">{t('env_failed_title')}</h4>
                     <p className="text-xs text-muted-foreground">{envError}</p>
                   </div>
                 </div>
@@ -582,7 +582,7 @@ function Home() {
                   <div className="w-7 h-7 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
                     <Sparkles className="w-4 h-4 text-primary" />
                   </div>
-                  <h3 className="text-xl font-bold text-foreground">Soil &amp; climate</h3>
+                  <h3 className="text-xl font-bold text-foreground">{t('metric_soil_health')} &amp; {t('metric_weather_climate')}</h3>
                   {locationInfo && (
                     <span className="text-xs font-mono text-muted-foreground bg-muted/40 px-2 py-1 rounded-md ml-auto">
                       {locationInfo.country}
@@ -592,18 +592,18 @@ function Home() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <MetricCard
                     icon={Cloud}
-                    label="Temp"
+                    label={t('label_temp')}
                     value={climateData?.temperature ?? '—'}
                     unit="°C"
                     isLoading={!climateData}
                     delay={0}
                     caption={climateProvenanceLabel(liveFetchedAt.climate)}
                   />
-                  <MetricCard icon={Droplets} label="Rain" value={climateData?.precipitation ?? '—'} unit="mm" isLoading={!climateData} delay={1} />
-                  <MetricCard icon={Wind} label="Humidity" value={climateData?.humidity ?? '—'} unit="%" isLoading={!climateData} delay={2} />
+                  <MetricCard icon={Droplets} label={t('label_rainfall')} value={climateData?.precipitation ?? '—'} unit="mm" isLoading={!climateData} delay={1} />
+                  <MetricCard icon={Wind} label={t('label_humidity')} value={climateData?.humidity ?? '—'} unit="%" isLoading={!climateData} delay={2} />
                   <MetricCard
                     icon={Zap}
-                    label="Soil pH"
+                    label={t('label_ph')}
                     value={soilData?.pH ?? '—'}
                     isLoading={!soilData}
                     delay={3}
@@ -611,7 +611,7 @@ function Home() {
                   />
                   <MetricCard
                     icon={Leaf}
-                    label="Nitrogen"
+                    label={t('label_nitrogen')}
                     value={soilData?.nitrogen ?? '—'}
                     unit="ppm"
                     isLoading={!soilData}
@@ -620,7 +620,7 @@ function Home() {
                   />
                   <MetricCard
                     icon={TestTube2}
-                    label="Phosphorus"
+                    label={t('label_phosphorus')}
                     value={soilData?.phosphorus ?? '—'}
                     unit="ppm"
                     isLoading={!soilData}
@@ -629,7 +629,7 @@ function Home() {
                   />
                   <MetricCard
                     icon={Sparkles}
-                    label="Potassium"
+                    label={t('label_potassium')}
                     value={soilData?.potassium ?? '—'}
                     unit="ppm"
                     isLoading={!soilData}
@@ -652,7 +652,7 @@ function Home() {
                   <div className="w-7 h-7 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
                     <Activity className="w-4 h-4 text-primary" />
                   </div>
-                  <h3 className="text-xl font-bold text-foreground">Air quality</h3>
+                  <h3 className="text-xl font-bold text-foreground">{t('metric_air_quality')}</h3>
                   <div className="ml-auto flex items-center gap-2">
                     {aqAge && (
                       <span className="text-[11px] text-muted-foreground">updated {aqAge}</span>
@@ -672,7 +672,7 @@ function Home() {
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <MetricCard
                     icon={Activity}
-                    label="US AQI"
+                    label={t('label_aqi')}
                     value={airQualityData?.current?.usAqi ?? '—'}
                     isLoading={isEnvLoading && !airQualityData}
                     badge={airQualityData?.current?.usAqi != null ? getAqiSeverityBadge('us_aqi', airQualityData.current.usAqi) : undefined}

@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { Sprout, Sun, Moon, GitBranch } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { useTheme } from './ThemeProvider';
+import { useTranslation } from '@/lib/i18n/I18nProvider';
+import { LanguageSelector } from './ui/LanguageSelector';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -9,6 +11,7 @@ import { cn } from '@/lib/utils';
  *  simulator passes nothing so `@clerk/clerk-react` stays out of its bundle. */
 export function Navigation({ authSlot }: { authSlot?: ReactNode }) {
   const { theme, toggleTheme } = useTheme();
+  const { t } = useTranslation();
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
@@ -32,25 +35,27 @@ export function Navigation({ authSlot }: { authSlot?: ReactNode }) {
 
           <div className="hidden sm:flex items-center gap-4 pl-2">
             <NavLink to="/" end className={linkClass}>
-              Home
+              {t('nav_home')}
             </NavLink>
             <NavLink to="/cascade" className={linkClass}>
               <span className="flex items-center gap-1.5">
                 <GitBranch className="w-3.5 h-3.5" />
-                Cascade
+                {t('nav_cascade')}
               </span>
             </NavLink>
             <NavLink to="/saath" className={linkClass}>
-              Saath
+              {t('nav_saath')}
             </NavLink>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
+          <LanguageSelector />
+
           <button
             onClick={toggleTheme}
             className="relative w-10 h-10 rounded-xl border border-border/60 bg-card/50 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-all duration-300 hover:border-primary/30 active:scale-95 group"
-            aria-label="Toggle theme"
+            aria-label={t('nav_theme_toggle')}
           >
             <motion.div
               key={theme}
