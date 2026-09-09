@@ -65,3 +65,25 @@ export function climateProvenanceLabel(fetchedAtMs?: number | null): string {
  */
 export const SOIL_PK_DISCLAIMER =
   'Phosphorus is derived from organic carbon and potassium is an estimate — treat N/P/K as a regional guide, not a soil test.';
+
+/**
+ * Caption for a leaf-scan result. Extends this file's existing
+ * verified/estimated/no-coverage vocabulary to a model output instead of a
+ * sensor reading — same discipline, new source (feature_status.md sec.2: "no
+ * silent fallback", applied here to a classifier instead of a soil reading).
+ * `coverage` distinguishes a real diagnosis from a "healthy" result that
+ * can't mean much because the model has no disease class for that crop at
+ * all (src/lib/leafScan/coverage.ts's `healthy-only`).
+ */
+export function leafScanProvenanceLabel(
+  coverage: 'full' | 'healthy_only',
+  outcome: 'diagnosed' | 'low_confidence',
+): string {
+  if (coverage === 'healthy_only') {
+    return 'No disease detected — but this model has no disease class for this crop, so that is not evidence of health.';
+  }
+  const base = 'On-device model, trained on lab-condition photographs — not a lab diagnosis.';
+  return outcome === 'low_confidence'
+    ? `${base} Confidence was too low to trust; treat as a possibility, not a finding.`
+    : base;
+}

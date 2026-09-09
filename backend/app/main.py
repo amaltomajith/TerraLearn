@@ -120,6 +120,19 @@ class SeasonContext(BaseModel):
     openAdvisories: Optional[List[str]] = None
     myTasks: Optional[List[dict]] = None  # each dict: {title: str, dueDate?: str, status: str}
 
+class ScanContext(BaseModel):
+    """A leaf-scan result on screen (planned_features.md sec.3). Session-scoped:
+    the frontend sends it only while the scan page is mounted. diagnosis /
+    confidence are null for a refusal or a below-threshold read; confidence is
+    the model's raw figure — never round it up."""
+    crop: Optional[str] = None
+    outcome: Optional[str] = None          # 'diagnosed' | 'low_confidence' | 'not_covered'
+    diagnosis: Optional[str] = None
+    confidence: Optional[float] = None
+    scannedAt: Optional[str] = None        # ISO
+    distanceKm: Optional[float] = None     # set only for a neighbour's report (Phase 3)
+    reportedBy: Optional[str] = None
+
 # Extend AskRequest to include optional season context
 class AskRequest(BaseModel):
     question: str
@@ -132,6 +145,7 @@ class AskRequest(BaseModel):
     mandiTrendPct: Optional[float] = None
     buyerDemand: Optional[List[BuyerDemandCtx]] = None
     season: Optional[SeasonContext] = None
+    scan: Optional[ScanContext] = None
     # Conversation memory + light identity (the backend stays stateless — the
     # client sends recent turns and the farmer's profile bits each call).
     history: Optional[List[ChatTurn]] = None
@@ -310,6 +324,41 @@ async def ask_question(req: AskRequest):
                 season_parts.append("MyTasks: " + "; ".join(task_strs))
             if season_parts:
                 formatted_input += "\nSeason context: " + ", ".join(season_parts)
+
+        # Leaf-scan context (planned_features.md sec.3's fusion input). Combine
+        # it with the soil / weather numbers above rather than answering it in
+        # isolation — that pairing is the differentiator over a plain plant-ID.
+        if req.scan:
+            sc = req.scan
+            if sc.outcome == "not_covered":
+                formatted_input += (
+                    f"\nLeaf scan: the on-device scanner has no model coverage for "
+                    f"{sc.crop or 'this crop'}, so NO diagnosis was produced. Do not guess a "
+                    f"disease — say it needs a human expert (KVK / agri-officer)."
+                )
+            elif sc.outcome:
+                bits = []
+                if sc.diagnosis:
+                    bits.append(f"result: {sc.diagnosis}")
+                if sc.confidence is not None:
+                    bits.append(
+                        f"model confidence {sc.confidence:.2f} — use exactly this figure, "
+                        f"never round it up"
+                    )
+                if sc.outcome == "low_confidence":
+                    bits.append(
+                        "this is BELOW the confidence threshold: treat it as 'possible', "
+                        "not a confirmed diagnosis"
+                    )
+                who = f" reported by {sc.reportedBy}" if sc.reportedBy else ""
+                if sc.reportedBy and sc.distanceKm is not None:
+                    who += f" ({sc.distanceKm} km away)"
+                when = f", scanned {sc.scannedAt}" if sc.scannedAt else ""
+                formatted_input += (
+                    f"\nLeaf scan{who}{when}: {sc.crop or 'crop'} — "
+                    + "; ".join(bits)
+                    + "."
+                )
 
         if req.saath:
             saath_block = _format_saath(req.saath)

@@ -7,6 +7,7 @@ import { MessagesPage } from './MessagesPage';
 import { BuyerPage } from './BuyerPage';
 import { ProfilePage } from './ProfilePage';
 import { DisputesPanel } from './DisputesPanel';
+import { ScanPage } from './ScanPage';
 
 /**
  * The Saath sub-app. Auth, the Clerk provider, the identity provider and the
@@ -19,6 +20,7 @@ export default function SaathApp() {
       <Route element={<SaathLayout />}>
         <Route index element={<Navigate to="feed" replace />} />
         <Route path="feed" element={<FeedPage />} />
+        <Route path="scan" element={<ScanPage />} />
         <Route path="listings" element={<MyListingsPage />} />
         <Route path="listings/new" element={<ListingComposer />} />
         <Route path="messages" element={<MessagesPage />} />

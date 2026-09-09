@@ -222,3 +222,37 @@ export interface PaymentReliability {
   avg_score: number | null;
   n: number;
 }
+
+// --- leaf scanner (farm_scans, migrations/20260909_03) --------------------
+
+export type LeafScanCoverage = 'full' | 'healthy_only' | 'none';
+export type LeafScanOutcome = 'diagnosed' | 'low_confidence' | 'not_covered';
+
+export interface LeafScanClassScore {
+  classId: number;
+  label: string;
+  confidence: number;
+}
+
+export interface FarmScan {
+  id: string;
+  farm_id: string;
+  cycle_id: string | null;
+  /** CROP_DATABASE key at scan time (src/lib/api.ts), not the display name. */
+  crop: string;
+  coverage: LeafScanCoverage;
+  outcome: LeafScanOutcome;
+  /** null unless outcome === 'diagnosed'. */
+  diagnosis: string | null;
+  /** null unless the model ran (outcome !== 'not_covered'). 0-1. */
+  confidence: number | null;
+  top3: LeafScanClassScore[] | null;
+  /** Unpopulated in phase 1 — the model doesn't output a severity grade. */
+  severity: string | null;
+  model_id: string;
+  model_version: string;
+  shared_to_saath: boolean;
+  image_url: string | null;
+  scanned_by: string;
+  created_at: string;
+}

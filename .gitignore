@@ -25,6 +25,11 @@ __pycache__/
 venv/
 .venv/
 
+# Raw model downloads used by scripts/prepare_leaf_model.py — the built
+# artifacts it produces (public/models/leaf-v1/) are what's tracked, not the
+# upstream ONNX files it downloads them from.
+.cache/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

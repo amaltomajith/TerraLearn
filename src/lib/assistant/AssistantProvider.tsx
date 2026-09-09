@@ -404,6 +404,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           mandiTrendPct: extra?.mandiTrendPct,
           buyerDemand: extra?.buyerDemand,
           saath: snapshotRef.current.data ?? undefined,
+          scan: pc?.scanContext ?? null,
         };
 
         const result = await askAssistant(payload, ac.signal);
