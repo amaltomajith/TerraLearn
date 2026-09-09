@@ -23,6 +23,7 @@ export interface TranslationSchema {
   nav_home: string;
   nav_cascade: string;
   nav_saath: string;
+  nav_vayu: string;
   nav_theme_toggle: string;
   nav_language: string;
 
@@ -88,4 +89,34 @@ export interface TranslationSchema {
   ai_voice_stop: string;
   ai_voice_unsupported: string;
   ai_suggestions: string[];
+
+  // Vayu — Flood & Drought Early Warning
+  vayu_drought_tab: string;
+  vayu_flood_tab: string;
+  vayu_drought_title: string;
+  vayu_flood_title: string;
+  vayu_drought_subtitle: string;
+  vayu_flood_subtitle: string;
+  vayu_spi3_label: string;
+  vayu_spi6_label: string;
+  vayu_severity_near_normal: string;
+  vayu_severity_watch: string;
+  vayu_severity_warning: string;
+  vayu_severity_emergency: string;
+  vayu_severity_catastrophic: string;
+  vayu_soil_moisture_surface: string;
+  vayu_soil_moisture_root: string;
+  vayu_dry_spell_days: string;
+  vayu_action_label: string;
+  vayu_disclaimer: string;
+  vayu_forecast_title: string;
+  vayu_flood_susceptibility: string;
+  vayu_susceptibility_low: string;
+  vayu_susceptibility_medium: string;
+  vayu_susceptibility_high: string;
+  vayu_7day_forecast: string;
+  vayu_external_imd: string;
+  vayu_external_flood_hub: string;
+  vayu_provenance: string;
+  vayu_loading: string;
 }

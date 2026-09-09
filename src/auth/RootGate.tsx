@@ -11,6 +11,7 @@ import { RequireOnboarding } from './RequireOnboarding';
 
 const SaathApp = lazy(() => import('@/components/saath/SaathApp'));
 const CascadeApp = lazy(() => import('@/components/cascade/CascadeApp'));
+const VayuApp = lazy(() => import('@/components/vayu/VayuApp'));
 const TeamPanel = lazy(() => import('@/components/farm/TeamPanel'));
 const JoinFarm = lazy(() => import('@/components/farm/JoinFarm'));
 
@@ -76,6 +77,14 @@ export function RootGate() {
                         element={
                           <Suspense fallback={<BrandSplash label="Loading Cascade…" />}>
                             <CascadeApp />
+                          </Suspense>
+                        }
+                      />
+                      <Route
+                        path="/vayu/*"
+                        element={
+                          <Suspense fallback={<BrandSplash label="Loading Vayu…" />}>
+                            <VayuApp />
                           </Suspense>
                         }
                       />
