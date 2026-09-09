@@ -10,6 +10,7 @@ import { GlobalAssistant } from '@/components/assistant/GlobalAssistant';
 import { RequireOnboarding } from './RequireOnboarding';
 
 const SaathApp = lazy(() => import('@/components/saath/SaathApp'));
+const CascadeApp = lazy(() => import('@/components/cascade/CascadeApp'));
 const TeamPanel = lazy(() => import('@/components/farm/TeamPanel'));
 const JoinFarm = lazy(() => import('@/components/farm/JoinFarm'));
 
@@ -67,6 +68,14 @@ export function RootGate() {
                         element={
                           <Suspense fallback={<BrandSplash label="Loading Saath…" />}>
                             <SaathApp />
+                          </Suspense>
+                        }
+                      />
+                      <Route
+                        path="/cascade/*"
+                        element={
+                          <Suspense fallback={<BrandSplash label="Loading Cascade…" />}>
+                            <CascadeApp />
                           </Suspense>
                         }
                       />
