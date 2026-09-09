@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { ClerkProvider, ClerkLoaded, ClerkLoading } from "@clerk/clerk-react";
 import { ThemeProvider } from "./components/ThemeProvider";
+import { I18nProvider } from "./lib/i18n/I18nProvider";
 import { BrandSplash } from "./components/BrandSplash";
 import { hasClerk, hasSupabase } from "./lib/saath/config";
 import { UnconfiguredApp } from "./auth/UnconfiguredApp";
@@ -16,7 +17,8 @@ const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefine
 function App() {
   return (
     <ThemeProvider>
-      <Toaster position="top-right" richColors theme="system" />
+      <I18nProvider>
+        <Toaster position="top-right" richColors theme="system" />
       {!hasClerk || !hasSupabase ? (
         <UnconfiguredApp />
       ) : (
@@ -40,6 +42,7 @@ function App() {
           </ClerkLoaded>
         </ClerkProvider>
       )}
+      </I18nProvider>
     </ThemeProvider>
   );
 }

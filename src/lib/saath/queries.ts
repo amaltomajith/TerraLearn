@@ -47,6 +47,12 @@ export async function getFarmer(id: string): Promise<Farmer | null> {
   return data as Farmer | null;
 }
 
+export async function updateFarmerLanguage(farmerId: string, language: string): Promise<void> {
+  const sb = requireSupabase();
+  const { error } = await sb.from('farmers').update({ language }).eq('id', farmerId);
+  if (error) console.warn('Could not update farmer language in Supabase:', error.message);
+}
+
 export type FarmerBrief = Pick<Farmer, 'id' | 'name' | 'village' | 'enterprises' | 'role'>;
 
 /** Minimal public profile fields for a set of farmer ids (assistant Saath snapshot). */

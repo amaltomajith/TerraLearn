@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { useIdentity } from '@/lib/identity/identity';
+import { useTranslation } from '@/lib/i18n/I18nProvider';
 import { getSupabase, isSupabaseConfigured } from '@/lib/saath/client';
 import { threadIdFor, sendMessage } from '@/lib/saath/queries';
 import { askAssistant } from './api';
@@ -148,6 +149,7 @@ function tempMessage(role: 'user' | 'assistant', content: string): AssistantMess
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const { activeFarmer, activeFarmerId, primaryFarm } = useIdentity();
+  const { language } = useTranslation();
 
   const [open, setOpenState] = useState(readOpen);
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -392,7 +394,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           lng: pc?.position?.lng ?? primaryFarm?.lng ?? null,
           cropContext: pc?.cropContext ?? null,
           history: priorTurns,
-          farmerLanguage: activeFarmer?.language ?? null,
+          farmerLanguage: language || activeFarmer?.language || 'kn',
           farmerName: activeFarmer?.name ?? null,
           village: activeFarmer?.village ?? null,
           enterprises: activeFarmer?.enterprises ?? null,
