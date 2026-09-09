@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Sprout, Sun, Moon, GitBranch } from 'lucide-react';
+import { Sprout, Sun, Moon, GitBranch, CloudRain } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { useTheme } from './ThemeProvider';
 import { useTranslation } from '@/lib/i18n/I18nProvider';
@@ -45,6 +45,12 @@ export function Navigation({ authSlot }: { authSlot?: ReactNode }) {
             </NavLink>
             <NavLink to="/saath" className={linkClass}>
               {t('nav_saath')}
+            </NavLink>
+            <NavLink to="/vayu" className={linkClass}>
+              <span className="flex items-center gap-1.5">
+                <CloudRain className="w-3.5 h-3.5" />
+                {t('nav_vayu')}
+              </span>
             </NavLink>
           </div>
         </div>

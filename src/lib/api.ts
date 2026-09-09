@@ -390,6 +390,9 @@ export const CACHE_TTL = {
   climateTrends: Infinity, // 5-year archive — does not move within a session
   location: Infinity, // currency / country for a coordinate
   mandi: Infinity, // includes negative caching (no rows for a commodity)
+  soilMoisture: 3 * HOUR,     // Vayu drought panel
+  rainfallForecast: HOUR,      // Vayu flood panel
+  elevation: Infinity,         // Static terrain proxy — changes never
 } as const;
 
 function cacheGet<T>(
@@ -415,6 +418,29 @@ const locationCache = new Map<string, CacheEntry<LocationInfo>>();
 const airQualityCache = new Map<string, CacheEntry<AirQualityData>>();
 const climateTrendsCache = new Map<string, CacheEntry<ClimateTrendsData>>();
 const mandiCache = new Map<string, CacheEntry<MandiPriceSeries | null>>();
+
+// ---- Vayu module caches ----
+export interface SoilMoistureData {
+  sm0_7cm: number;    // m³/m³  0–7 cm layer
+  sm7_28cm: number;   // m³/m³  7–28 cm layer
+  fetchedAt: string;
+}
+
+export interface RainfallForecastData {
+  daily: {
+    time: string[];           // YYYY-MM-DD
+    precipitationSum: number[]; // mm/day
+    precipitationProb: number[]; // % probability
+  };
+}
+
+export interface ElevationData {
+  elevationM: number; // metres above sea level (SRTM via Open-Meteo)
+}
+
+const soilMoistureCache = new Map<string, CacheEntry<SoilMoistureData>>();
+const rainfallForecastCache = new Map<string, CacheEntry<RainfallForecastData>>();
+const elevationCache = new Map<string, CacheEntry<ElevationData>>();
 
 export interface FetchOpts {
   /** Skip a still-valid live cache entry and re-fetch. */
@@ -1297,4 +1323,108 @@ export function calculateYield(
     buyerName: marketOverride?.buyerName,
     buyerDistanceKm: marketOverride?.distanceKm,
   };
+}
+
+// ===================== VAYU — FLOOD & DROUGHT DATA =====================
+
+/** Fetch current soil-moisture for 0–7 cm and 7–28 cm layers from Open-Meteo. */
+export async function fetchSoilMoisture(
+  lat: number,
+  lng: number,
+  opts?: FetchOpts,
+): Promise<SoilMoistureData> {
+  const key = coordKey(lat, lng);
+  const cached = cacheGet(soilMoistureCache, key, CACHE_TTL.soilMoisture, opts?.force);
+  if (cached) return cached;
+
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+      `&hourly=soil_moisture_0_to_7cm,soil_moisture_7_to_28cm` +
+      `&forecast_days=1&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Open-Meteo soil moisture HTTP ${res.status}`);
+    const data = await res.json();
+    const hourly = data.hourly ?? {};
+    const sm0 = (hourly.soil_moisture_0_to_7cm ?? []) as (number | null)[];
+    const sm7 = (hourly.soil_moisture_7_to_28cm ?? []) as (number | null)[];
+    // Average over the returned hourly values for a daily representative value.
+    const avg = (arr: (number | null)[]) => {
+      const valid = arr.filter((v): v is number => v != null);
+      return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : 0;
+    };
+    const result: SoilMoistureData = {
+      sm0_7cm: Math.round(avg(sm0) * 1000) / 1000,
+      sm7_28cm: Math.round(avg(sm7) * 1000) / 1000,
+      fetchedAt: new Date().toISOString(),
+    };
+    cacheSet(soilMoistureCache, key, result);
+    return result;
+  } catch (err) {
+    console.error('fetchSoilMoisture error:', err);
+    return { sm0_7cm: 0, sm7_28cm: 0, fetchedAt: new Date().toISOString() };
+  }
+}
+
+/** Fetch 7-day daily rainfall forecast + precipitation probability from Open-Meteo. */
+export async function fetchRainfallForecast(
+  lat: number,
+  lng: number,
+  opts?: FetchOpts,
+): Promise<RainfallForecastData> {
+  const key = coordKey(lat, lng);
+  const cached = cacheGet(rainfallForecastCache, key, CACHE_TTL.rainfallForecast, opts?.force);
+  if (cached) return cached;
+
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+      `&daily=precipitation_sum,precipitation_probability_max` +
+      `&forecast_days=7&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Open-Meteo forecast HTTP ${res.status}`);
+    const data = await res.json();
+    const daily = data.daily ?? {};
+    const result: RainfallForecastData = {
+      daily: {
+        time: daily.time ?? [],
+        precipitationSum: (daily.precipitation_sum ?? []).map(
+          (v: number | null) => (v != null ? Math.round(v * 10) / 10 : 0),
+        ),
+        precipitationProb: (daily.precipitation_probability_max ?? []).map(
+          (v: number | null) => (v != null ? Math.round(v) : 0),
+        ),
+      },
+    };
+    cacheSet(rainfallForecastCache, key, result);
+    return result;
+  } catch (err) {
+    console.error('fetchRainfallForecast error:', err);
+    return { daily: { time: [], precipitationSum: [], precipitationProb: [] } };
+  }
+}
+
+/** Fetch terrain elevation (metres) for a coordinate from Open-Meteo. */
+export async function fetchElevation(
+  lat: number,
+  lng: number,
+  opts?: FetchOpts,
+): Promise<ElevationData> {
+  const key = coordKey(lat, lng);
+  const cached = cacheGet(elevationCache, key, CACHE_TTL.elevation, opts?.force);
+  if (cached) return cached;
+
+  try {
+    const url = `https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Open-Meteo elevation HTTP ${res.status}`);
+    const data = await res.json();
+    const elevationM = Array.isArray(data.elevation) ? (data.elevation[0] ?? 0) : 0;
+    const result: ElevationData = { elevationM: Math.round(elevationM) };
+    cacheSet(elevationCache, key, result);
+    return result;
+  } catch (err) {
+    console.error('fetchElevation error:', err);
+    return { elevationM: 0 };
+  }
 }
