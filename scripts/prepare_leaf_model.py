@@ -10,8 +10,17 @@ Why this script exists
 Inference runs on-device (planned_features.md sec.3: "export to ONNX/TFLite,
 quantized, for on-device inference"), because the Render free tier is 512 MB and
 already OOM-died once loading torch + an 80 MB model -- see the header of
-supabase/migrations/20260908_01_knowledge_rag.sql. So the model has to be small
-enough to ship to a phone: we use the int8 build (2.7 MB).
+supabase/migrations/20260908_01_knowledge_rag.sql.
+
+We ship the **fp32** graph (9.2 MB), NOT the int8 build (2.7 MB). The
+onnx-community int8 quantisation of this MobileNetV2 is broken -- measured on
+PlantVillage test images it scores ~0/10, collapsing almost everything to
+"Healthy Bell Pepper" / "Healthy Corn" at ~30-80% confidence, while the fp32
+graph scores 10/10 at 67-100%. MobileNetV2 (depthwise convs + ReLU6/Clip) is
+notoriously quantisation-sensitive and this export did not do per-channel /
+QDQ quantisation. 9.2 MB is still smaller than the 14 MB ONNX-Runtime WASM
+binary the browser also caches, so the size cost is marginal; a 2.7 MB model
+that returns garbage is not a trade worth making.
 
 sec.3 also makes an explainability overlay non-negotiable. MobileNetV2 is
 conv -> GlobalAveragePool -> Linear, which is exactly the architecture class
@@ -27,18 +36,9 @@ produces both.
 Outputs
 -------
 public/models/leaf-v1/
-    model.onnx        int8 graph, patched to emit the feature map as a 2nd output
+    model.onnx        fp32 graph, patched to emit the feature map as a 2nd output
     cam_weights.bin   classifier.weight, [38, 1280] float32, row-major
     labels.json       id2label from the upstream config.json
-
-A note on where cam_weights comes from
---------------------------------------
-The int8 graph stores the classifier as `classifier.weight_quantized`
-([1280, 38] int8, transposed, with a separate scale/zero-point). Rather than
-dequantize and transpose that, we read `classifier.weight` ([38, 1280] float32)
-straight out of the fp32 graph. The two differ by quantization error only, and
-CAM is a visualisation of *where* the model looked, not a number we report -- so
-the fp32 weights are the better choice and the mismatch is immaterial.
 """
 
 from __future__ import annotations
@@ -60,10 +60,8 @@ OUT_DIR = ROOT / "public" / "models" / "leaf-v1"
 CACHE = ROOT / ".cache" / "leaf-model"
 
 # The float tensor feeding GlobalAveragePool -- i.e. the [1, 1280, 7, 7] feature
-# map. Verified present in BOTH the fp32 and int8 graphs: int8 quantisation
-# rescales and re-adds the bias before the Clip, so this stays float even in the
-# quantised build. If a future upstream re-export changes this name the script
-# fails loudly below rather than silently producing a broken overlay.
+# map. If a future upstream re-export changes this name the script fails loudly
+# below rather than silently producing a broken overlay.
 FEATURE_TENSOR = "/mobilenet_v2/conv_1x1/activation/Clip_output_0"
 CLASSIFIER_WEIGHT = "classifier.weight"
 
@@ -124,15 +122,14 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     print(f"source: {REPO}")
 
-    int8_path = fetch("onnx/model_int8.onnx", CACHE / "model_int8.onnx")
     fp32_path = fetch("onnx/model.onnx", CACHE / "model.onnx")
     cfg_path = fetch("config.json", CACHE / "config.json")
 
-    print("\npatching int8 graph for CAM ...")
-    int8 = patch_feature_output(onnx.load(str(int8_path)))
-    onnx.checker.check_model(int8)
+    print("\npatching fp32 graph for CAM ...")
+    fp32 = patch_feature_output(onnx.load(str(fp32_path)))
+    onnx.checker.check_model(fp32)
     out_model = OUT_DIR / "model.onnx"
-    onnx.save(int8, str(out_model))
+    onnx.save(fp32, str(out_model))
     print(f"  wrote {out_model.relative_to(ROOT)} ({out_model.stat().st_size:,} bytes)")
 
     print("\nextracting classifier weights from the fp32 graph ...")

@@ -71,19 +71,22 @@ export const SOIL_PK_DISCLAIMER =
  * verified/estimated/no-coverage vocabulary to a model output instead of a
  * sensor reading — same discipline, new source (feature_status.md sec.2: "no
  * silent fallback", applied here to a classifier instead of a soil reading).
- * `coverage` distinguishes a real diagnosis from a "healthy" result that
- * can't mean much because the model has no disease class for that crop at
- * all (src/lib/leafScan/coverage.ts's `healthy-only`).
+ * `singleClass` flags the species the model has only one class for
+ * (src/lib/leafScan/classes.ts) — it can name the plant but not judge its
+ * health.
  */
 export function leafScanProvenanceLabel(
-  coverage: 'full' | 'healthy_only',
+  singleClass: boolean,
   outcome: 'diagnosed' | 'low_confidence',
 ): string {
-  if (coverage === 'healthy_only') {
-    return 'No disease detected — but this model has no disease class for this crop, so that is not evidence of health.';
+  const base =
+    'On-device model — identifies 1 of 14 plants from a leaf photo, trained on ' +
+    'lab-condition images. Not a lab diagnosis; confirm before acting.';
+  if (outcome === 'low_confidence') {
+    return `${base} Confidence here was too low to rely on — treat it as a hint, not a finding.`;
   }
-  const base = 'On-device model, trained on lab-condition photographs — not a lab diagnosis.';
-  return outcome === 'low_confidence'
-    ? `${base} Confidence was too low to trust; treat as a possibility, not a finding.`
-    : base;
+  if (singleClass) {
+    return `${base} This plant has only one class in the model, so it can identify the plant but not confirm disease or health.`;
+  }
+  return base;
 }

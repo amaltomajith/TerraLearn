@@ -13,7 +13,7 @@ needs a follow-up · ⏳ blocked on Supabase access · 📋 not started.
 
 | Item | Status |
 |---|---|
-| Phase 1 — on-device leaf scanner (classify + explainability + honest refusal) | ✅ code complete |
+| Phase 1 — on-device leaf scanner (identifies plant + disease from the photo, explainability overlay, low-confidence refusal) | ✅ code complete |
 | Phase 1 — `farm_scans` persistence | ⏳ table migration written, not applied (no Supabase access) |
 | Phase 2 — scan result fused into the AI assistant's context | ✅ code complete |
 | Phase 2 — pesticide / chemical-dosage safety gate | 🔧 shipped as a prompt rule (see §9) |
@@ -33,16 +33,24 @@ An in-browser leaf scanner living inside Saath at `/saath/scan` (tab: **Scan**).
 **Flow.** Farmer opens the Scan tab → the model + WASM runtime preload → farmer
 takes/uploads a single-leaf photo → the image is decoded, EXIF-stripped, resized
 (shortest edge 256) and centre-cropped to 224×224 entirely in memory → on-device
-inference → one of three honest outcomes:
+inference over **all 38 classes** (the model identifies the plant from the photo —
+it is **not** gated to the farm's registered crop) → one of two honest outcomes:
 
 | Outcome | When | Shown |
 |---|---|---|
-| `diagnosed` | top class ≥ 0.70 confidence | disease name + confidence + CAM overlay + provenance caption |
-| `low_confidence` | top class < 0.70 | "not confident enough", top-3 possibilities, no single verdict |
-| `not_covered` | the farm's crop has no class in the model | amber panel routing the farmer to a KVK extension officer — **the model never runs** |
+| `diagnosed` | top class ≥ 0.70 confidence | detected plant + disease/pest (or "no disease signs") + confidence + CAM overlay + provenance caption |
+| `low_confidence` | top class < 0.70 | "not sure enough to call it", top-3 possibilities, no single verdict |
+
+The farm-crop gate (`coverage.ts`, `not_covered` outcome) was removed on 2026-09-09
+— it refused based on the farm profile without ever looking at the image, so an
+onion farm couldn't scan a tomato leaf. The trade-off: a 38-way softmax always
+names one of the 14 plants even for a plant that is none of them, so the result
+**leads with the detected plant name** for the farmer to sanity-check and the
+caption states the 14-plant limit. `classes.ts` documents this; a real fix (a
+"none of these" class, or a species-ID model in front) is future work.
 
 **Nothing leaves the device on this path.** Inference is `onnxruntime-web` (WASM) on
-the quantised model in `public/models/leaf-v1/`; the canvas re-encode strips any GPS
+the fp32 model in `public/models/leaf-v1/`; the canvas re-encode strips any GPS
 geotag; there is no network call past the model's own asset load. This is
 `planned_features.md` §1's DPDP-Act-2023 flag on farm data, honoured by construction.
 
@@ -54,11 +62,16 @@ heat overlay on the 224×224 crop. `scripts/prepare_leaf_model.py` patches the O
 graph to emit the pre-pool feature map as a second output and extracts the classifier
 weight matrix (`cam_weights.bin`) so this needs no Python at inference time.
 
-**Why on-device / quantised.** `planned_features.md` §3 ("export to ONNX/TFLite,
-quantized, for on-device inference") and the Render free tier's 512 MB limit, which
-already OOM-died once loading torch + an 80 MB model. Cost note: the ONNX Runtime
-WASM binary Vite bundles is ~14 MB — far bigger than the 2.7 MB model — a real
-first-visit cost on rural connections, cached indefinitely after.
+**Why on-device.** `planned_features.md` §3 ("export to ONNX/TFLite … for on-device
+inference") and the Render free tier's 512 MB limit, which already OOM-died once
+loading torch + an 80 MB model. We ship the **fp32** graph (9.2 MB), **not** the
+int8 build (2.7 MB): the onnx-community int8 quantisation of this MobileNetV2 is
+broken — ~0/10 on PlantVillage test images, collapsing almost everything to
+"Healthy Bell Pepper" / "Healthy Corn", while fp32 scores 10/10 at 67–100%
+confidence. MobileNetV2 (depthwise convs + ReLU6/Clip) is quantisation-sensitive and
+this export skipped per-channel / QDQ. Cost note: the ONNX Runtime WASM binary Vite
+bundles is ~14 MB — still bigger than the 9.2 MB model — cached indefinitely after
+first visit.
 
 ---
 
@@ -95,7 +108,7 @@ local KVK / agri-officer; never present a chemical + dose as a direct instructio
 | | |
 |---|---|
 | Repo | `onnx-community/mobilenet_v2_1.0_224-plant-disease-identification-ONNX` |
-| Build used | `model_int8.onnx`, 2.7 MB, patched for the CAM feature output |
+| Build used | fp32 `model.onnx` (9.2 MB), patched for the CAM feature output. **int8 build rejected** — measured ~0/10 on PlantVillage test images vs fp32's 10/10; MobileNetV2 is quantisation-sensitive and the export skipped per-channel/QDQ |
 | Architecture | MobileNetV2 (1.0, 224) |
 | Training data | PlantVillage — Kaggle "New Plant Diseases Dataset" version — 38 classes / 14 species, **lab-condition photographs** |
 | Upstream eval | 95.4% accuracy on the PlantVillage test split |
@@ -104,25 +117,24 @@ local KVK / agri-officer; never present a chemical + dose as a direct instructio
 **14 species in the raw model:** apple, blueberry, cherry, corn/maize, grape, orange,
 peach, bell pepper, potato, raspberry, soybean, squash, strawberry, tomato.
 
-**What the scanner actually diagnoses** (gated by `src/lib/leafScan/coverage.ts`
-against TerraLearn's `CROP_DATABASE`):
+**What the scanner recognises** — all 14 plants, from the photo (`src/lib/leafScan/classes.ts`):
 
-| Coverage | Crops | Classes |
-|---|---|---|
-| Full | corn, grapes, potatoes, peppers, strawberries, tomatoes | tomato has 10, the rest 2–4 |
-| Healthy-only | soybeans | PlantVillage has only "healthy soybean" — a "no disease" result here is **not** evidence of health, and the UI says so |
-| None (honest refusal) | wheat, rice, barley, oats, cotton, sorghum, sugarcane, lettuce, carrots, onions, cabbage, spinach, cucumbers | — |
+- **Multi-class** (can distinguish diseases): apple, cherry, corn, grape, peach,
+  bell pepper, potato, strawberry, tomato (tomato has 10 classes, the rest 2–4).
+- **Single-class** (names the plant, can't judge health): blueberry, raspberry,
+  soybean (healthy only); orange, squash (one disease only). The UI says so per result.
 
-Softmax is computed **only over the crop's permitted class ids**, so a tomato scan is
-never scored against grape classes and its confidence can't be inflated by classes
-that were never in contention.
+Softmax runs over **all 38 classes** — so the model reports which plant *and* which
+condition from the image alone. It has no "not one of these 14" class, so an
+out-of-set plant (onion, wheat) still gets a confident label; the result leads with
+the plant name so that is visible, not hidden.
 
 ### Deviation from `planned_features.md` §3
 
 The spec calls for a **hybrid CNN+ViT trained on a merged PlantVillage + PlantDoc +
 crop-specific dataset**. Phase 1 ships a **pretrained MobileNetV2 on PlantVillage
 alone** as a deliberate shortcut to get the whole pipeline (capture → inference →
-CAM → coverage gate → fusion → UI) working end-to-end. Consequences, acknowledged:
+CAM → fusion → UI) working end-to-end. Consequences, acknowledged:
 
 - The lab-vs-field generalisation gap §3 warns about is **not** addressed — real phone
   photos will underperform the demo.
@@ -137,9 +149,11 @@ CAM → coverage gate → fusion → UI) working end-to-end. Consequences, ackno
 
 | Gate | Where | State |
 |---|---|---|
-| Coverage — never label a crop the model can't see | `src/lib/leafScan/coverage.ts` | ✅ enforced; unlisted crop fails safe to `none` |
-| Confidence threshold — escalate below it instead of guessing | `src/lib/leafScan/threshold.ts` | 🔧 `LOW_CONFIDENCE_THRESHOLD = 0.70`, `IS_CALIBRATED = false` — chosen by feel, UI says so |
-| Provenance caption on every result | `src/lib/dataProvenance.ts` → `leafScanProvenanceLabel` | ✅ "on-device model, lab-condition training, not a lab diagnosis" |
+| Detected-plant name shown first, so an out-of-set plant is visible not hidden | `ScanPage.tsx` / `classes.ts` | ✅ result leads with the plant; intro lists the 14 |
+| Confidence threshold — refuse below it instead of guessing | `src/lib/leafScan/threshold.ts` | 🔧 `LOW_CONFIDENCE_THRESHOLD = 0.70`, `IS_CALIBRATED = false` — chosen by feel, UI says so |
+| Single-class caveat — "names the plant, can't judge health" | `dataProvenance.ts` + `ScanPage.tsx` | ✅ shown for blueberry/raspberry/soybean/orange/squash |
+| Provenance caption on every result | `src/lib/dataProvenance.ts` → `leafScanProvenanceLabel` | ✅ "on-device model, 14 plants, lab-condition training, not a lab diagnosis" |
+| "None of these 14 plants" detection | — | 📋 not built — the known gap from removing the crop gate (see §2) |
 | Threshold calibration script | `scripts/calibrate_threshold.py` | 📋 not yet written — must evaluate on held-out **PlantDoc** field images, not PlantVillage |
 
 ---
@@ -184,24 +198,19 @@ Backend (`git pull` brings the `scan` field + prompt changes — restart uvicorn
 cd backend && python run_backend.py     # needs OPENAI_API_KEY (Groq) in backend/.env.local
 ```
 
-**To test the full diagnosis + fusion path:**
+**To test the diagnosis + fusion path** (works on any farm now — no crop change needed):
 
 1. Apply `supabase/migrations/20260909_03_farm_scans.sql` in the Supabase dashboard
    (optional — the scanner works without it, but "Past scans" needs it).
-2. Sign in and make sure the active farm's **primary crop is one of the six covered
-   ones** (tomato / potato / corn / grape / pepper / strawberry). No seeded persona
-   grows a covered crop — Ramesha=paddy, Chikkamma=sericulture, Manjula=mushroom all
-   hit the "not covered" path. Change it via FarmSwitcher → "update this farm".
-3. Get test images: Kaggle "New Plant Diseases Dataset" (`vipoooool`) — the exact
+2. Get test images: Kaggle "New Plant Diseases Dataset" (`vipoooool`) — the exact
    training set — `valid/` split, e.g. a tomato or potato leaf. None are bundled in
    the repo.
-4. Scan → confirm the disease name, confidence and CAM overlay render.
-5. Open the floating assistant **while still on the Scan tab**, ask "what should I do
+3. Scan → confirm the result shows **detected plant + condition**, confidence, and
+   the CAM overlay. A photo of an out-of-set plant (onion, rice) should still name
+   one of the 14 — check the plant name is wrong, which is the point of showing it.
+4. Open the floating assistant **while still on the Scan tab**, ask "what should I do
    about this?" → confirm the answer references the scan **and** the soil/weather
    numbers, hedges a `low_confidence` result, and doesn't hand out a pesticide dose.
-
-**Not-covered path** (any persona as-is): scan → confirm the amber KVK panel, and that
-the assistant says it needs an expert rather than guessing a disease.
 
 ---
 
@@ -228,6 +237,7 @@ the assistant says it needs an expert rather than guessing a disease.
 |---|---|---|
 | Hybrid CNN+ViT, merged PlantVillage+PlantDoc | Pretrained MobileNetV2, PlantVillage only | Phase-1 shortcut to get the pipeline working; swap-ready |
 | Grad-CAM | Exact CAM (Zhou 2016) | MobileNetV2's `conv→GAP→Linear` makes CAM exact and gradient-free — strictly better here |
+| Crop known from farm profile; refuse other crops | Model identifies the plant from the photo (all 38 classes), no farm-crop gate | The profile gate refused an onion farm scanning a tomato leaf; trade-off is a confident label for out-of-set plants (§2) |
 | Chemical advice via the `terralearn-action` draft-and-confirm block | System-prompt rule (no dose without the farmer's numbers, defer to label + KVK) | The action block only supports `send_message`; a new confirm-card is its own task |
 | Treatment advice cited from a disease corpus | Model-generated for now | Seeding the corpus needs Supabase write access |
 
@@ -239,9 +249,9 @@ the assistant says it needs an expert rather than guessing a disease.
 Frontend
   src/components/saath/ScanPage.tsx        # the Scan tab — capture, result, history, assistant publish
   src/lib/leafScan/
-    model.ts                               # onnxruntime-web inference + exact CAM
+    model.ts                               # onnxruntime-web inference (38-class softmax) + exact CAM
     image.ts                               # decode, EXIF strip, resize/crop, tensor
-    coverage.ts                            # crop → permitted classes / honest refusal
+    classes.ts                             # 38 classes → {species, condition, healthy}; the 14-plant list
     threshold.ts                           # confidence gate (uncalibrated)
   src/lib/saath/scans.ts                   # createFarmScan / listFarmScans (best-effort)
   src/lib/saath/types.ts                   # FarmScan, LeafScan* DTOs
@@ -258,7 +268,7 @@ Backend
   backend/app/agent.py                     # system prompt: leaf-scan fusion + pesticide safety rules
 
 Assets & tooling
-  public/models/leaf-v1/                   # model.onnx (2.7 MB), cam_weights.bin, labels.json — committed
+  public/models/leaf-v1/                   # model.onnx (fp32, 9.2 MB), cam_weights.bin, labels.json — committed
   scripts/prepare_leaf_model.py            # rebuilds the above from the HF checkpoint
   .cache/                                  # raw upstream ONNX downloads — gitignored
 

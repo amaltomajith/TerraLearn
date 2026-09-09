@@ -5,9 +5,14 @@
 // killed the 512 MB worker on first use. Nothing here calls the network past
 // the model's own asset load.
 //
+// The model is the fp32 graph (9.2 MB), not the int8 build (2.7 MB): the
+// onnx-community int8 quantisation of this MobileNetV2 is broken -- ~0/10 on
+// PlantVillage test images, collapsing to "Healthy Bell Pepper" / "Healthy
+// Corn" -- while fp32 scores 10/10. See scripts/prepare_leaf_model.py.
+//
 // A note on download size, so it isn't rediscovered the hard way: the ONNX
 // Runtime WASM binary Vite bundles for this (ort-wasm-simd-threaded.wasm,
-// under dist/assets/ after a build) is ~14 MB -- much bigger than the 2.7 MB
+// under dist/assets/ after a build) is ~14 MB -- still bigger than the 9.2 MB
 // model it runs. That's the runtime (shared by any future ONNX model this
 // app adds), not the model, and the browser caches it indefinitely after
 // first load (Vite fingerprints the filename), but it is a real first-visit
@@ -15,7 +20,6 @@
 // solved, here.
 
 import * as ort from 'onnxruntime-web/wasm';
-import type { CropCoverage } from './coverage';
 
 // public/ is served as static files, not passed through Vite's module graph
 // — fetched at runtime by URL, like cam_weights.bin below, rather than
@@ -95,17 +99,17 @@ export interface ClassScore {
 }
 
 export interface LeafScanRawResult {
-  /** Top-3 predictions, restricted to the crop's permitted class ids and
-   *  re-normalized so their confidences reflect only that restricted set —
-   *  never scored against classes the crop can't have (coverage.ts). */
+  /** Top-3 predictions from a full 38-class softmax, highest first. The model
+   *  identifies the plant from the photo, so every class is in contention —
+   *  see src/lib/leafScan/classes.ts for the limitation that carries. */
   top3: ClassScore[];
   /** [7,7] class activation map for the top prediction, values in [0,1]. */
   cam: Float32Array;
 }
 
 /**
- * Run inference restricted to a crop's permitted classes, and compute the
- * exact CAM for the top prediction.
+ * Run inference over all 38 classes and compute the exact CAM for the top
+ * prediction.
  *
  * MobileNetV2ForImageClassification is conv features -> GlobalAveragePool ->
  * Linear, which is precisely the architecture class activation mapping (Zhou
@@ -115,14 +119,7 @@ export interface LeafScanRawResult {
  * head, where the weighting has to be estimated rather than read directly off
  * the classifier.
  */
-export async function runLeafScan(
-  image: Float32Array,
-  coverage: CropCoverage,
-): Promise<LeafScanRawResult> {
-  if (coverage.kind === 'none') {
-    throw new Error('runLeafScan called for an uncovered crop — check coverage.ts first');
-  }
-
+export async function runLeafScan(image: Float32Array): Promise<LeafScanRawResult> {
   const [session, camWeights, labels] = await Promise.all([
     getSession(),
     getCamWeights(),
@@ -141,30 +138,27 @@ export async function runLeafScan(
     );
   }
 
-  // Softmax restricted to the crop's own class ids. This is the enforcement
-  // point for coverage.ts: a tomato scan is never scored against grape
-  // classes, so its confidence can't be inflated by classes that were never
-  // in contention.
-  const allowedIds = coverage.classIds;
-  const allowedLogits = allowedIds.map((id) => logits[id]);
-  const maxLogit = Math.max(...allowedLogits);
-  const exps = allowedLogits.map((l) => Math.exp(l - maxLogit));
-  const sumExp = exps.reduce((a, b) => a + b, 0);
-  const scored: ClassScore[] = allowedIds
-    .map((classId, i) => ({
-      classId,
-      label: labels[classId] as string,
-      confidence: exps[i] / sumExp,
-    }))
-    .sort((a, b) => b.confidence - a.confidence);
+  // Full 38-class softmax: the model identifies the plant from the photo, so
+  // every class competes. The confidence threshold (threshold.ts) is the only
+  // gate now; classes.ts documents the "confident label for an unknown plant"
+  // failure this reintroduces and how the UI surfaces it.
+  const n = logits.length;
+  let maxLogit = -Infinity;
+  for (let i = 0; i < n; i++) if (logits[i] > maxLogit) maxLogit = logits[i];
+  let sumExp = 0;
+  const exps = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    exps[i] = Math.exp(logits[i] - maxLogit);
+    sumExp += exps[i];
+  }
+  const scored: ClassScore[] = Array.from({ length: n }, (_, classId) => ({
+    classId,
+    label: labels[classId] as string,
+    confidence: exps[classId] / sumExp,
+  })).sort((a, b) => b.confidence - a.confidence);
 
   const top3 = scored.slice(0, 3);
-  const topClassId = top3[0].classId;
-
-  // CAM for the top class, from the *unrestricted* 1280-channel weight row —
-  // coverage only gates which classes compete for the label, not what the
-  // overlay highlights for whichever one wins.
-  const cam = computeCam(featureMap, camWeights, topClassId);
+  const cam = computeCam(featureMap, camWeights, top3[0].classId);
 
   return { top3, cam };
 }

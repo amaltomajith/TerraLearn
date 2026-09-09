@@ -55,7 +55,7 @@ create table if not exists farm_scans (
   top3            jsonb,
   severity        text,                         -- unpopulated in phase 1; see note above
   model_id        text not null default 'onnx-community/mobilenet_v2_1.0_224-plant-disease-identification-ONNX',
-  model_version   text not null default 'int8',
+  model_version   text not null default 'fp32',
   shared_to_saath boolean not null default false,
   location        geography(Point, 4326),
   image_url       text,
