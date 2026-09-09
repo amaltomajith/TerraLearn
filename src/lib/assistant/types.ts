@@ -53,11 +53,32 @@ export interface SeasonContext {
   myTasks?: { title: string; dueDate?: string | null; status: string }[];
 }
 
-  export interface AssistantPageContext {
+/**
+ * A leaf-scan result currently on screen (src/components/saath/ScanPage.tsx).
+ * Published while the scan page is mounted and cleared on unmount — the
+ * session-scoped fusion input from planned_features.md sec.3, never written to
+ * the knowledge corpus. `diagnosis` / `confidence` are null for a refusal
+ * (`not_covered`) or a below-threshold read (`low_confidence`); `confidence`
+ * is passed through exactly as the model returned it — never rounded, never
+ * inferred. `distanceKm` / `reportedBy` are set only for a neighbour's shared
+ * report (Phase 3).
+ */
+export interface ScanContextData {
+  crop: string;
+  outcome: 'diagnosed' | 'low_confidence' | 'not_covered';
+  diagnosis: string | null;
+  confidence: number | null;
+  scannedAt: string; // ISO
+  distanceKm?: number;
+  reportedBy?: string;
+}
+
+export interface AssistantPageContext {
   position: { lat: number; lng: number } | null;
   cropContext?: CropContextData | null;
   assistantContext?: AssistantExtraContext | null;
   season?: SeasonContext | null;
+  scanContext?: ScanContextData | null;
 }
 
 
@@ -182,6 +203,7 @@ export interface AskPayload {
   buyerDemand?: AssistantExtraContext['buyerDemand'];
   saath?: SaathSnapshot;
   season?: BackendSeasonContext | null;
+  scan?: ScanContextData | null;
 }
 
 export interface AskResult {

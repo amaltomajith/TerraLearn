@@ -9,6 +9,13 @@ export default defineConfig({
     entries: ["src/main.tsx", "src/tempobook/**/*"],
     // Pre-bundle maplibre-gl so its web worker initialises correctly in dev.
     include: ["maplibre-gl"],
+    // Do NOT pre-bundle onnxruntime-web (leaf scanner). esbuild's dep bundle
+    // rewrites the import.meta.url that ort uses to locate its .wasm runtime,
+    // so in dev the fetch 404s and Vite serves index.html instead — the WASM
+    // loader then fails with "expected magic word 00 61 73 6d, found 3c 21 64
+    // 6f" (that's "<!do"). Excluded, Vite serves it straight from
+    // node_modules/onnxruntime-web/dist/ and the .wasm path resolves.
+    exclude: ["onnxruntime-web"],
   },
   plugins: [
     react(),

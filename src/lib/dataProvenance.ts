@@ -65,3 +65,28 @@ export function climateProvenanceLabel(fetchedAtMs?: number | null): string {
  */
 export const SOIL_PK_DISCLAIMER =
   'Phosphorus is derived from organic carbon and potassium is an estimate — treat N/P/K as a regional guide, not a soil test.';
+
+/**
+ * Caption for a leaf-scan result. Extends this file's existing
+ * verified/estimated/no-coverage vocabulary to a model output instead of a
+ * sensor reading — same discipline, new source (feature_status.md sec.2: "no
+ * silent fallback", applied here to a classifier instead of a soil reading).
+ * `singleClass` flags the species the model has only one class for
+ * (src/lib/leafScan/classes.ts) — it can name the plant but not judge its
+ * health.
+ */
+export function leafScanProvenanceLabel(
+  singleClass: boolean,
+  outcome: 'diagnosed' | 'low_confidence',
+): string {
+  const base =
+    'On-device model — identifies 1 of 14 plants from a leaf photo, trained on ' +
+    'lab-condition images. Not a lab diagnosis; confirm before acting.';
+  if (outcome === 'low_confidence') {
+    return `${base} Confidence here was too low to rely on — treat it as a hint, not a finding.`;
+  }
+  if (singleClass) {
+    return `${base} This plant has only one class in the model, so it can identify the plant but not confirm disease or health.`;
+  }
+  return base;
+}
