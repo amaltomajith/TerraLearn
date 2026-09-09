@@ -42,6 +42,14 @@ export interface AssistantExtraContext {
     unit?: string;
     distanceKm?: number;
   }[];
+  /** Vayu drought snapshot — forwarded to the LLM so suggestions reference actual risk. */
+  droughtContext?: {
+    spi3: number | null;
+    spi6: number | null;
+    severity: string; // 'near-normal' | 'watch' | 'warning' | 'emergency' | 'catastrophic'
+    sm0_7cm: number | null; // soil moisture 0-7 cm (m³/m³)
+    drySpellDays: number;
+  };
 }
 
 export interface SeasonContext {

@@ -1,4 +1,4 @@
-﻿// DailyGuidelinesCard.tsx
+// DailyGuidelinesCard.tsx
 // Context-aware daily farm guidelines derived from climate + soil + crop-cycle data.
 // No extra API calls — everything is passed in from home.tsx.
 
@@ -15,10 +15,12 @@ import {
   CloudRain,
   FlaskConical,
   Loader2,
+  Gauge,
 } from "lucide-react";
 import type { ClimateData, SoilData } from "@/lib/api";
 import type { CropCycle } from "@/lib/farm/types";
 import { cn } from "@/lib/utils";
+import { Link } from "react-router-dom";
 
 interface Guideline {
   id: string;
@@ -32,6 +34,9 @@ function buildGuidelines(
   climate: ClimateData,
   soil: SoilData | null,
   activeCycle: CropCycle | null,
+  droughtSeverity?: string,
+  sm0_7cm?: number | null,
+  drySpellDays?: number,
 ): Guideline[] {
   const tips: Guideline[] = [];
   const { temperature, precipitation, humidity, windSpeed } = climate;
@@ -178,6 +183,33 @@ function buildGuidelines(
     });
   }
 
+  // Drought / Vayu inference — only shown when meaningfully elevated
+  if (droughtSeverity && droughtSeverity !== 'near-normal') {
+    const severityLabels: Record<string, string> = {
+      watch: 'Drought Watch',
+      warning: 'Drought Warning',
+      emergency: 'Drought Emergency',
+      catastrophic: 'Catastrophic Drought',
+    };
+    const severityPriority: Record<string, Guideline['priority']> = {
+      watch: 'info',
+      warning: 'warn',
+      emergency: 'urgent',
+      catastrophic: 'urgent',
+    };
+    const smNote = sm0_7cm != null
+      ? ` Surface moisture: ${(sm0_7cm * 100).toFixed(0)}% of sat.`
+      : '';
+    const dryNote = drySpellDays ? ` ${drySpellDays} dry days this season.` : '';
+    tips.push({
+      id: 'drought-alert',
+      icon: Gauge,
+      title: `${severityLabels[droughtSeverity] ?? droughtSeverity} — check irrigation`,
+      detail: `SPI-6 indicates ${droughtSeverity.replace('-', ' ')} drought conditions.${smNote}${dryNote} Open Vayu tab for full analysis.`,
+      priority: severityPriority[droughtSeverity] ?? 'info',
+    });
+  }
+
   // Deduplicate and cap
   const seen = new Set<string>();
   return tips
@@ -203,12 +235,15 @@ interface Props {
   soil: SoilData | null;
   activeCycle: CropCycle | null;
   isLoading?: boolean;
+  droughtSeverity?: 'near-normal' | 'watch' | 'warning' | 'emergency' | 'catastrophic';
+  sm0_7cm?: number | null;
+  drySpellDays?: number;
 }
 
-export function DailyGuidelinesCard({ climate, soil, activeCycle, isLoading }: Props) {
+export function DailyGuidelinesCard({ climate, soil, activeCycle, isLoading, droughtSeverity, sm0_7cm, drySpellDays }: Props) {
   const guidelines = useMemo(
-    () => (climate ? buildGuidelines(climate, soil, activeCycle) : []),
-    [climate, soil, activeCycle],
+    () => (climate ? buildGuidelines(climate, soil, activeCycle, droughtSeverity, sm0_7cm, drySpellDays) : []),
+    [climate, soil, activeCycle, droughtSeverity, sm0_7cm, drySpellDays],
   );
 
   const today = new Date().toLocaleDateString("en-IN", {
@@ -230,17 +265,34 @@ export function DailyGuidelinesCard({ climate, soil, activeCycle, isLoading }: P
           </h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">{today}</p>
         </div>
-        {climate && (
-          <div className="text-right">
-            <p className="text-lg font-bold text-foreground leading-none">
-              {climate.temperature.toFixed(0)}°C
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              {climate.precipitation.toFixed(0)} mm · {climate.humidity}% RH
-              {climate.windSpeed !== undefined && ` · ${climate.windSpeed.toFixed(0)} km/h`}
-            </p>
-          </div>
-        )}
+        <div className="flex flex-col items-end gap-1">
+          {climate && (
+            <div className="text-right">
+              <p className="text-lg font-bold text-foreground leading-none">
+                {climate.temperature.toFixed(0)}°C
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {climate.precipitation.toFixed(0)} mm · {climate.humidity}% RH
+                {climate.windSpeed !== undefined && ` · ${climate.windSpeed.toFixed(0)} km/h`}
+              </p>
+            </div>
+          )}
+          {droughtSeverity && droughtSeverity !== 'near-normal' && (
+            <Link to="/vayu/drought" className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border"
+              style={{
+                color: droughtSeverity === 'emergency' || droughtSeverity === 'catastrophic' ? '#ef4444'
+                     : droughtSeverity === 'warning' ? '#f97316' : '#eab308',
+                borderColor: droughtSeverity === 'emergency' || droughtSeverity === 'catastrophic' ? '#ef444430'
+                           : droughtSeverity === 'warning' ? '#f9731630' : '#eab30830',
+                backgroundColor: droughtSeverity === 'emergency' || droughtSeverity === 'catastrophic' ? '#ef444410'
+                              : droughtSeverity === 'warning' ? '#f9731610' : '#eab30810',
+              }}
+            >
+              <CloudRain className="w-2.5 h-2.5" />
+              {droughtSeverity.replace('-', ' ')}
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="px-5 py-4">

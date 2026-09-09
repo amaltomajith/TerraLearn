@@ -388,6 +388,18 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
         const pc = pageContext;
         const extra = pc?.assistantContext ?? undefined;
+        // Build a plain-text drought note so the LLM system prompt can use it
+        // even if the backend doesn't yet parse droughtContext as structured.
+        const droughtCtx = extra?.droughtContext;
+        const droughtNote = droughtCtx && droughtCtx.severity !== 'near-normal'
+          ? `Current drought status: ${droughtCtx.severity.replace('-', ' ')}. ` +
+            (droughtCtx.spi6 != null ? `SPI-6=${droughtCtx.spi6.toFixed(2)}. ` : '') +
+            (droughtCtx.sm0_7cm != null
+              ? `Surface soil moisture ${(droughtCtx.sm0_7cm * 100).toFixed(0)}%. `
+              : '') +
+            (droughtCtx.drySpellDays ? `${droughtCtx.drySpellDays} dry days this season.` : '')
+          : undefined;
+
         const payload: AskPayload = {
           question: text,
           lat: pc?.position?.lat ?? primaryFarm?.lat ?? null,
@@ -399,7 +411,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           village: activeFarmer?.village ?? null,
           enterprises: activeFarmer?.enterprises ?? null,
           locationName: extra?.locationName,
-          env: extra?.env,
+          env: extra?.env
+            ? { ...extra.env, ...(droughtNote ? { droughtNote } : {}) }
+            : droughtNote ? ({ droughtNote } as never)
+            : undefined,
           suggestedCrops: extra?.suggestedCrops,
           mandiTrendPct: extra?.mandiTrendPct,
           buyerDemand: extra?.buyerDemand,

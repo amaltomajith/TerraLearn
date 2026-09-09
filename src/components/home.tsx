@@ -64,6 +64,7 @@ import {
   fetchLocationInfo,
   fetchAirQualityData,
   fetchClimateTrends,
+  fetchSoilMoisture,
   calculateYield,
   fetchMandiPrices,
   getSeason,
@@ -75,6 +76,7 @@ import {
   type ClimateTrendsData,
   type MandiPriceSeries,
 } from '@/lib/api';
+import { computeSPI, latestSPI } from '@/lib/vayu/spi';
 import {
   suggestCropsWithCircular,
   demandRatePerTon,
@@ -113,6 +115,13 @@ function Home() {
   const [demandMatches, setDemandMatches] = useState<NearbyDemandRow[]>([]);
   const [mandiSeries, setMandiSeries] = useState<MandiPriceSeries | null>(null);
 
+  // Vayu drought snapshot — used in DailyGuidelinesCard and forwarded to the AI.
+  const [vayuSPI3, setVayuSPI3] = useState<number | null>(null);
+  const [vayuSPI6, setVayuSPI6] = useState<number | null>(null);
+  const [vayuSeverity, setVayuSeverity] = useState<string>('near-normal');
+  const [vayuSM0, setVayuSM0] = useState<number | null>(null);
+  const [vayuDrySpell, setVayuDrySpell] = useState<number>(0);
+
   // Location snapshot: air quality + 5yr trends + current climate + soil.
   const loadEnvData = useCallback(async (lat: number, lng: number) => {
     setIsEnvLoading(true);
@@ -139,6 +148,36 @@ function Home() {
     }
     setIsEnvLoading(false);
   }, []);
+
+  // Vayu drought inference — runs after the climate trends are fetched (same data).
+  useEffect(() => {
+    if (!climateTrends?.daily?.time) return;
+    const { time, precipitationSum } = climateTrends.daily;
+    const s3 = computeSPI(time, precipitationSum, 3);
+    const s6 = computeSPI(time, precipitationSum, 6);
+    const l3 = latestSPI(s3);
+    const l6 = latestSPI(s6);
+    setVayuSPI3(l3?.spi ?? null);
+    setVayuSPI6(l6?.spi ?? null);
+    setVayuSeverity((l6 ?? l3)?.severity ?? 'near-normal');
+    // Dry-spell count (days < 1 mm since June 1)
+    const now = new Date();
+    const seasonStart = new Date(now.getFullYear(), 5, 1);
+    let dry = 0;
+    for (let i = time.length - 1; i >= 0; i--) {
+      if (new Date(time[i]) < seasonStart) break;
+      if ((precipitationSum[i] ?? 0) < 1) dry++;
+    }
+    setVayuDrySpell(dry);
+  }, [climateTrends]);
+
+  // Fetch surface soil moisture for Vayu whenever the position changes.
+  useEffect(() => {
+    if (!position) return;
+    fetchSoilMoisture(position.lat, position.lng)
+      .then((sm) => setVayuSM0(sm.sm0_7cm))
+      .catch(() => setVayuSM0(null));
+  }, [position]);
 
   // Explicit / scheduled refresh of just the live-ish readings (weather + AQI).
   // Soil, 5-year trends and location keep their long cache TTLs and are not
@@ -411,8 +450,16 @@ function Home() {
         distanceKm:
           d.distance_m != null ? Math.round((d.distance_m / 1000) * 10) / 10 : undefined,
       })),
+      droughtContext: {
+        spi3: vayuSPI3,
+        spi6: vayuSPI6,
+        severity: vayuSeverity,
+        sm0_7cm: vayuSM0,
+        drySpellDays: vayuDrySpell,
+      },
     }),
-    [locationInfo, climateData, soilData, airQualityData, autoSuggestions, mandiSeries, demandMatches],
+    [locationInfo, climateData, soilData, airQualityData, autoSuggestions, mandiSeries, demandMatches,
+     vayuSPI3, vayuSPI6, vayuSeverity, vayuSM0, vayuDrySpell],
   );
 
   const riskBriefContext: RiskBriefContext | null = useMemo(() => {
@@ -769,6 +816,9 @@ function Home() {
               soil={soilData}
               activeCycle={activeCycle ?? null}
               isLoading={isEnvLoading}
+              droughtSeverity={vayuSeverity as 'near-normal' | 'watch' | 'warning' | 'emergency' | 'catastrophic'}
+              sm0_7cm={vayuSM0}
+              drySpellDays={vayuDrySpell}
             />
             <MyTasksCard compact={activeRole !== 'worker'} />
 
