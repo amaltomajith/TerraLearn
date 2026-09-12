@@ -1,0 +1,31 @@
+name: Refresh weather cache
+
+# Triggers backend/app/refresh/weather.py via the protected
+# POST /internal/refresh/weather endpoint every hour (Open-Meteo's forecast
+# grid updates roughly hourly — see puppeteer MCP spec §5).
+#
+# Requires the repo secret INTERNAL_REFRESH_TOKEN (see refresh-market-prices.yml).
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: POST /internal/refresh/weather
+        run: |
+          BASE="${{ vars.RENDER_BACKEND_URL || 'https://terralearn-n3br.onrender.com' }}"
+          echo "Refreshing weather cache at ${BASE}/internal/refresh/weather"
+          code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 150 --retry 2 --retry-delay 20 \
+            -X POST -H "X-Internal-Token: ${{ secrets.INTERNAL_REFRESH_TOKEN }}" \
+            "${BASE}/internal/refresh/weather" || true)
+          echo "HTTP ${code}"
+          cat /tmp/body || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::warning::Weather refresh did not return 200 (got ${code:-none})"
+          fi

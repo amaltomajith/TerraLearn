@@ -28,3 +28,16 @@ services:
         value: https://qrkjbdvbehvklaqgotrv.supabase.co
       - key: SUPABASE_ANON_KEY
         sync: false
+      # --- MCP refresh layer + Farmer MCP server + IVR harness ---
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: AGMARKNET_API_KEY
+        sync: false
+      - key: MARKET_REFRESH_STATE
+        value: Karnataka
+      - key: INTERNAL_REFRESH_TOKEN
+        sync: false
+      # DNS-rebinding allowlist for /mcp/farmer — the actual Render hostname
+      # (see .github/workflows/keep-render-awake.yml for the same hostname).
+      - key: MCP_ALLOWED_HOSTS
+        value: terralearn-n3br.onrender.com
