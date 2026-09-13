@@ -6,3 +6,12 @@ langgraph>=0.2.0
 python-dotenv>=1.0.0
 httpx>=0.27.0
 pydantic>=2.6.0
+# Pinned exact, not >=: mcp 2.x renamed FastMCP -> MCPServer with a different
+# constructor/method surface (mcp.server.mcpserver.MCPServer, not
+# mcp.server.fastmcp.FastMCP) partway through the 2.x line's early releases.
+# 2.2.0 is the version app/mcp/farmer_server.py was built and tested against
+# (streamable_http_app() mounting + lifespan sharing + DNS-rebinding
+# allowed_hosts all verified working at this exact version) — bump deliberately,
+# not via a loose floor, and re-verify the mount recipe in app/mcp/farmer_server.py
+# against the release notes before doing so.
+mcp==2.2.0

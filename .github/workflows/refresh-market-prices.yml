@@ -1,0 +1,36 @@
+name: Refresh market prices cache
+
+# Triggers backend/app/refresh/prices.py via the protected
+# POST /internal/refresh/prices endpoint every 30 minutes (Agmarknet's own
+# update cadence, not an arbitrary guess — see puppeteer MCP spec §5). The
+# endpoint always returns HTTP 200 with an ok/errors payload; a non-200 here
+# means the backend itself is unreachable, not that the refresh logic failed.
+#
+# Requires the repo secret INTERNAL_REFRESH_TOKEN to match the backend's
+# INTERNAL_REFRESH_TOKEN env var (Settings -> Secrets and variables -> Actions
+# -> Secrets — a secret, not a variable, since it's sensitive, unlike
+# RENDER_BACKEND_URL below which stays a vars. entry per keep-render-awake.yml).
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: POST /internal/refresh/prices
+        run: |
+          BASE="${{ vars.RENDER_BACKEND_URL || 'https://terralearn-n3br.onrender.com' }}"
+          echo "Refreshing market prices at ${BASE}/internal/refresh/prices"
+          code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 150 --retry 2 --retry-delay 20 \
+            -X POST -H "X-Internal-Token: ${{ secrets.INTERNAL_REFRESH_TOKEN }}" \
+            "${BASE}/internal/refresh/prices" || true)
+          echo "HTTP ${code}"
+          cat /tmp/body || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::warning::Price refresh did not return 200 (got ${code:-none})"
+          fi

@@ -1,8 +1,9 @@
 import app.ssl_patch  # noqa: F401 — must be first; patches SSL before other imports
 import asyncio
+import os
 import logging
 from typing import Optional, List
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.agent import run_agent, build_system_prompt, extract_action
@@ -16,11 +17,31 @@ try:
 except Exception as e:  # pragma: no cover
     logger.warning("RAG module import failed: %s", e)
 
+# Farmer MCP server (Puppeteer MCP spec §3/§9) — must be built BEFORE the
+# FastAPI() app so its lifespan can be shared. Mounting mcp's
+# streamable_http_app() into an existing app WITHOUT sharing its lifespan
+# fails at request time with "Task group is not initialized. Make sure to use
+# run()." — confirmed by reproducing the failure against the installed mcp
+# SDK version before writing this. A failure here (e.g. mcp not installed yet)
+# degrades to no lifespan / no mount rather than crashing the whole backend —
+# same "never let a secondary feature block the main path" pattern as the RAG
+# import above.
+_farmer_mcp_app = None
+try:
+    from app.mcp.farmer_server import build_farmer_mcp_app
+    _farmer_mcp_app = build_farmer_mcp_app()
+    logger.info("Farmer MCP server: built, will mount at /mcp/farmer")
+except Exception as e:  # pragma: no cover
+    logger.warning("Farmer MCP server build failed (will not be mounted): %s", e)
 
 app = FastAPI(
     title="TerraLearn Environmental Agent API",
     version="1.0.0",
+    lifespan=_farmer_mcp_app.router.lifespan_context if _farmer_mcp_app else None,
 )
+
+if _farmer_mcp_app is not None:
+    app.mount("/mcp/farmer", _farmer_mcp_app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -230,6 +251,60 @@ def health_check():
     Used by the keep-Render-awake GitHub Action to stop the free-tier
     service from sleeping."""
     return {"status": "ok"}
+
+
+def _check_internal_token(x_internal_token: Optional[str]) -> None:
+    """Shared-secret guard for /internal/* endpoints (refresh jobs, IVR
+    harness). Fails closed: an unconfigured token is a 503, not an open door."""
+    expected = os.getenv("INTERNAL_REFRESH_TOKEN", "")
+    if not expected:
+        raise HTTPException(status_code=503, detail="INTERNAL_REFRESH_TOKEN not configured")
+    if x_internal_token != expected:
+        raise HTTPException(status_code=403, detail="invalid or missing X-Internal-Token")
+
+
+@app.post("/internal/refresh/prices")
+async def refresh_prices_endpoint(x_internal_token: Optional[str] = Header(default=None)):
+    """Triggered by .github/workflows/refresh-market-prices.yml every 30 min.
+    Always returns HTTP 200 with an ok/errors payload — a refresh failure
+    (bad key, Agmarknet down, Supabase write error) must never surface as a
+    500 or block anything else."""
+    _check_internal_token(x_internal_token)
+    from app.refresh.prices import refresh_market_prices
+    result = await asyncio.to_thread(refresh_market_prices)
+    return {"ok": result.ok, "refreshed": result.refreshed, "errors": result.errors}
+
+
+@app.post("/internal/refresh/weather")
+async def refresh_weather_endpoint(x_internal_token: Optional[str] = Header(default=None)):
+    """Triggered by .github/workflows/refresh-weather.yml every hour."""
+    _check_internal_token(x_internal_token)
+    from app.refresh.weather import refresh_weather
+    result = await asyncio.to_thread(refresh_weather)
+    return {"ok": result.ok, "refreshed": result.refreshed, "errors": result.errors}
+
+
+class IVRSimulateRequest(BaseModel):
+    farmer_id: str
+    keypress: str
+    language: Optional[str] = "kn"
+
+
+@app.post("/internal/ivr/simulate")
+async def ivr_simulate_endpoint(req: IVRSimulateRequest, x_internal_token: Optional[str] = Header(default=None)):
+    """curl-testable entry point into the IVR tier/guard/escalation logic — no
+    real telephony this pass (see Puppeteer MCP spec decisions); this and
+    backend/scripts/ivr_harness.py are the two ways to exercise it."""
+    _check_internal_token(x_internal_token)
+    from app.ivr.runner import handle_ivr_turn
+    result = await asyncio.to_thread(handle_ivr_turn, req.farmer_id, req.keypress, req.language)
+    return {
+        "tier": result.tier,
+        "text": result.text,
+        "tool_name": result.tool_name,
+        "guard_unmatched": result.guard_unmatched,
+    }
+
 
 @app.post("/api/ask", response_model=AskResponse)
 async def ask_question(req: AskRequest):
