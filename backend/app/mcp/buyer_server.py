@@ -28,7 +28,7 @@ import os
 import re
 import logging
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from app.mcp import supabase_owner as owner
@@ -37,17 +37,24 @@ from app.refresh.supabase_admin import insert as service_insert
 
 logger = logging.getLogger(__name__)
 
-mcp = MCPServer("terralearn-buyer")
-
-
 def _allowed_hosts() -> list[str]:
     raw = os.getenv("MCP_ALLOWED_HOSTS", "127.0.0.1:8000,localhost:8000")
     return [h.strip() for h in raw.split(",") if h.strip()]
 
 
+# See farmer_server.py's matching comment: mcp 1.x's FastMCP takes these as
+# constructor kwargs (migrated off 2.x's MCPServer in Phase 5 because
+# langchain-mcp-adapters hard-requires mcp<2.0.0).
+mcp = FastMCP(
+    "terralearn-buyer",
+    stateless_http=True,
+    json_response=True,
+    transport_security=TransportSecuritySettings(allowed_hosts=_allowed_hosts()),
+)
+
+
 def build_buyer_mcp_app():
-    security = TransportSecuritySettings(allowed_hosts=_allowed_hosts())
-    return mcp.streamable_http_app(stateless_http=True, json_response=True, transport_security=security)
+    return mcp.streamable_http_app()
 
 
 # ---------------------------------------------------------------------------

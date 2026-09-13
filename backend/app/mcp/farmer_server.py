@@ -40,7 +40,7 @@ from datetime import date, datetime
 from typing import Literal
 
 import httpx
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from app.mcp import supabase_owner as owner
@@ -53,21 +53,34 @@ from app.ivr.escalation import escalate
 
 logger = logging.getLogger(__name__)
 
-mcp = MCPServer("terralearn-farmer")
-
-
 def _allowed_hosts() -> list[str]:
     raw = os.getenv("MCP_ALLOWED_HOSTS", "127.0.0.1:8000,localhost:8000")
     return [h.strip() for h in raw.split(",") if h.strip()]
 
 
+# mcp 1.x's FastMCP takes stateless_http/json_response/transport_security as
+# constructor kwargs (2.x's MCPServer took them on streamable_http_app()
+# instead — this module was migrated off 2.x in Phase 5 because
+# langchain-mcp-adapters hard-requires mcp<2.0.0; the dual-mount recipe below
+# was re-verified working at this exact version before relying on it). Built
+# at module level (not deferred into a function) because every @mcp.tool()
+# decorator below needs `mcp` to already exist — safe to read
+# MCP_ALLOWED_HOSTS here because importing app.mcp.supabase_owner (above)
+# already triggers .env.local loading as a side effect of its own import.
+mcp = FastMCP(
+    "terralearn-farmer",
+    stateless_http=True,
+    json_response=True,
+    transport_security=TransportSecuritySettings(allowed_hosts=_allowed_hosts()),
+)
+
+
 def build_farmer_mcp_app():
-    """Returns the mounted ASGI app + the lifespan context to share with the
-    parent FastAPI app (see app/main.py — mounting without sharing the
-    lifespan fails at request time with "Task group is not initialized",
-    confirmed against the installed mcp SDK version before writing this)."""
-    security = TransportSecuritySettings(allowed_hosts=_allowed_hosts())
-    return mcp.streamable_http_app(stateless_http=True, json_response=True, transport_security=security)
+    """Returns the mounted ASGI app to share via app/main.py's combined
+    lifespan (mounting without sharing the lifespan fails at request time
+    with "Task group is not initialized" — confirmed against the installed
+    mcp SDK version before writing this)."""
+    return mcp.streamable_http_app()
 
 
 # ---------------------------------------------------------------------------

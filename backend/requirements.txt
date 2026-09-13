@@ -1,17 +1,23 @@
 fastapi>=0.110.0
 uvicorn>=0.28.0
-langchain>=0.1.0
-langchain-openai>=0.1.0
-langgraph>=0.2.0
 python-dotenv>=1.0.0
 httpx>=0.27.0
 pydantic>=2.6.0
-# Pinned exact, not >=: mcp 2.x renamed FastMCP -> MCPServer with a different
-# constructor/method surface (mcp.server.mcpserver.MCPServer, not
-# mcp.server.fastmcp.FastMCP) partway through the 2.x line's early releases.
-# 2.2.0 is the version app/mcp/farmer_server.py was built and tested against
-# (streamable_http_app() mounting + lifespan sharing + DNS-rebinding
-# allowed_hosts all verified working at this exact version) — bump deliberately,
-# not via a loose floor, and re-verify the mount recipe in app/mcp/farmer_server.py
-# against the release notes before doing so.
-mcp==2.2.0
+# langchain-mcp-adapters (Phase 5: web assistant <-> Farmer/Buyer MCP servers)
+# hard-requires mcp<2.0.0 and langchain-core>=1.3.3 via its own package
+# metadata (confirmed via `pip show`/importlib.metadata before pinning these,
+# not guessed) — these floors exist to satisfy that, not arbitrarily bumped.
+langchain>=1.3.0
+langchain-core>=1.3.3
+langchain-openai>=1.4.0
+langgraph>=1.2.0
+# Pinned exact, not >=: this ecosystem (mcp + langchain-mcp-adapters) has
+# shown real cross-version incompatibility within this same project — mcp 2.x
+# (this project's own earlier choice, Phases 1-4) turned out to be
+# incompatible with langchain-mcp-adapters' mcp<2.0.0 requirement. Downgraded
+# to 1.x's FastMCP (mcp.server.fastmcp.FastMCP, not
+# mcp.server.mcpserver.MCPServer) — the dual-server mount recipe (lifespan
+# sharing, TransportSecuritySettings) was re-verified working at this exact
+# version before pinning it, not assumed unchanged from 2.x.
+mcp==1.30.0
+langchain-mcp-adapters==0.3.2

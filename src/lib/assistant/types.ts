@@ -204,6 +204,12 @@ export interface AskPayload {
   saath?: SaathSnapshot;
   season?: BackendSeasonContext | null;
   scan?: ScanContextData | null;
+  // Phase 5 (Puppeteer MCP spec): real identity for role-scoped Farmer/Buyer
+  // MCP tool access in the backend agent. Mirrors backend AskRequest's
+  // farmerId/role fields exactly — both already in scope at the one call
+  // site that builds this payload (AssistantProvider.tsx's send()).
+  farmerId?: string | null;
+  role?: string | null;
 }
 
 export interface AskResult {

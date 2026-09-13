@@ -398,6 +398,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           farmerName: activeFarmer?.name ?? null,
           village: activeFarmer?.village ?? null,
           enterprises: activeFarmer?.enterprises ?? null,
+          // Phase 5: lets the backend agent load role-scoped Farmer/Buyer MCP
+          // tools, identity-bound to this real id server-side.
+          farmerId: activeFarmerId ?? null,
+          role: activeFarmer?.role ?? null,
           locationName: extra?.locationName,
           env: extra?.env,
           suggestedCrops: extra?.suggestedCrops,
