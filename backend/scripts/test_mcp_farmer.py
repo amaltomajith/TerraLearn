@@ -40,6 +40,7 @@ async def run(url: str, farmer_id: str) -> int:
                 "get_nearby_ifs_matches", "get_nearby_listings", "get_mandi_price",
                 "get_my_tasks", "get_lot_status",
                 "propose_create_lot", "confirm_create_lot", "request_human_escalation",
+                "propose_respond_to_offer", "confirm_respond_to_offer",
             }
             missing = expected - {t.name for t in tools}
             print("[PASS]" if not missing else "[FAIL]", f"all {len(expected)} expected tools present" if not missing else f"missing: {missing}")

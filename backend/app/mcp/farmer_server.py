@@ -399,6 +399,58 @@ def confirm_create_lot(farmer_id: str, crop: str, quantity: float, unit: str, gr
 
 
 @mcp.tool()
+def propose_respond_to_offer(farmer_id: str, lot_id: str, offer_id: str, action: Literal["accept", "decline"]) -> dict:
+    """Drafts a response to a buyer's offer on the farmer's lot — does NOT
+    apply it. 'counter' is not supported by this tool (the spec's own
+    signature has no counter-price argument)."""
+    lot = owner.get_lot(lot_id)
+    if not lot or lot["seller_id"] != farmer_id:
+        return {"available": False, "reason": "lot not found, or this farmer is not its seller"}
+    offer = owner.get_lot_offer(offer_id)
+    if not offer or offer["lot_id"] != lot_id:
+        return {"available": False, "reason": "offer not found for this lot"}
+    if offer["status"] != "pending":
+        return {"available": False, "reason": f"offer is already '{offer['status']}', not pending"}
+
+    return {
+        "available": True,
+        "requires_confirmation": True,
+        "draft": {"lot_id": lot_id, "offer_id": offer_id, "action": action,
+                   "offer_price": offer.get("price"), "offer_quantity": offer.get("quantity")},
+        "message": f"Draft: {action} the offer of {offer.get('price')} for {offer.get('quantity')} {lot['unit']}. Not applied yet — confirm to proceed.",
+    }
+
+
+@mcp.tool()
+def confirm_respond_to_offer(farmer_id: str, lot_id: str, offer_id: str, action: Literal["accept", "decline"]) -> dict:
+    """Applies the response for real — see this module's SECOND TRUST-BOUNDARY
+    NOTE above. On 'accept', also matches the lot to the buyer."""
+    lot = owner.get_lot(lot_id)
+    if not lot or lot["seller_id"] != farmer_id:
+        return {"available": False, "reason": "lot not found, or this farmer is not its seller"}
+    offer = owner.get_lot_offer(offer_id)
+    if not offer or offer["lot_id"] != lot_id:
+        return {"available": False, "reason": "offer not found for this lot"}
+    if offer["status"] != "pending":
+        return {"available": False, "reason": f"offer is already '{offer['status']}', not pending"}
+
+    try:
+        new_status = "accepted" if action == "accept" else "declined"
+        owner.update_lot_offer_status(offer_id, new_status)
+        if action == "accept":
+            owner.update_lot_status(lot_id, "matched", buyer_id=offer["buyer_id"], price_per_unit=offer.get("price"))
+        owner.insert_lot_event(
+            lot_id=lot_id, event_type="offer_accepted" if action == "accept" else "offer_declined",
+            actor_id=farmer_id, detail={"offer_id": offer_id},
+        )
+    except Exception as e:
+        logger.error("confirm_respond_to_offer failed: %s", e)
+        return {"available": False, "reason": "could not apply response"}
+
+    return {"available": True, "message": f"Offer {new_status}."}
+
+
+@mcp.tool()
 def request_human_escalation(farmer_id: str, context: str) -> dict:
     """Escalates to a human — independent of whichever tier/tool was active.
     No confirmation gate: asking for help is inherently safe, unlike a
