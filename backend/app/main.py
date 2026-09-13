@@ -560,6 +560,33 @@ async def ask_question(req: AskRequest):
         return AskResponse(answer=f"Error running environmental assistant: {err_str}")
 
 
+class McpTraceRequest(BaseModel):
+    question: str
+    role: str            # 'farmer' | 'buyer' | 'both'
+    farmerId: str
+    language: Optional[str] = "en"
+
+
+@app.post("/debug/mcp-trace")
+async def mcp_trace_endpoint(req: McpTraceRequest):
+    """Dev-only: runs one turn and returns the full tool-call reasoning trace,
+    not just the final answer — backs the /mcp-trace debug page (verifying the
+    agent's MCP tool selection is correct, not the production chat path).
+
+    Deliberately NOT under /internal/* with the X-Internal-Token gate: this is
+    read-only (plus side-effect-free propose_* drafts — confirm_* isn't even
+    reachable as a tool), the same risk profile as the already-unauthenticated
+    /api/ask, which any farmerId-bearing caller can already hit. /internal/*'s
+    token gate exists for endpoints that WRITE (refresh jobs, confirm-*), not
+    to gatekeep every read path in this stateless backend."""
+    from app.agent import run_agent_with_trace, build_system_prompt
+    system_prompt = build_system_prompt(language=req.language)
+    result = await run_agent_with_trace(
+        req.question, role=req.role, farmer_id=req.farmerId, system_prompt=system_prompt,
+    )
+    return result
+
+
 @app.post("/api/risk-brief", response_model=RiskBriefResponse)
 async def get_risk_brief(req: RiskBriefRequest):
     """Generate a concise 2-3 sentence environmental risk brief for a crop/location.

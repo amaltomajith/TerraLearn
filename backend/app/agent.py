@@ -386,6 +386,74 @@ async def _try_fallback(api_key: str, base_url: str, model_name: str, msgs: list
     return None
 
 
+async def run_agent_with_trace(
+    user_input: str,
+    role: Optional[str] = None,
+    farmer_id: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+) -> dict:
+    """Dev-only: runs one turn and returns the FULL reasoning trace (which
+    tools the model chose, with what arguments, what came back) alongside the
+    final answer — not just the answer, which is all run_agent() exposes.
+    Built for the /debug/mcp-trace page (verifying the agent's tool-selection
+    "thinking" is correct), not for production traffic.
+
+    Deliberately skips run_agent()'s retry/fallback logic — a debug tool
+    benefits from seeing a raw error immediately, not an automatic
+    OpenRouter fallback masking what actually happened on the primary call.
+    """
+    if env_local_path.exists():
+        load_dotenv(env_local_path, override=True)
+    load_dotenv(env_path, override=False)
+
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    base_url = os.getenv("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
+    model_name = os.getenv("OPENAI_MODEL", "llama-3.3-70b-versatile")
+    if not api_key:
+        return {"error": "OPENAI_API_KEY is not configured.", "steps": [], "answer": None}
+
+    tools = await _build_role_scoped_tools(role, farmer_id)
+    agent = create_react_agent(_get_llm(api_key, base_url, model_name), tools)
+    # The default SYSTEM_PROMPT assumes /api/ask's usual pre-fetched context
+    # block (weather/soil/mandi numbers already in the prompt) is present and
+    # tells the model to "answer from those first" — this debug endpoint
+    # supplies no such block, so that instruction can bias the model away
+    # from calling any tool at all. Override with an explicit nudge: this is
+    # exactly what the page exists to verify, so make tool use the expected
+    # path, not a fallback.
+    trace_prompt = (
+        (system_prompt or SYSTEM_PROMPT)
+        + "\n\nDEBUG MODE: no context has been pre-fetched for you. For any "
+        "question about the farmer's own farm, crop, tasks, prices, or "
+        "network, you MUST call the relevant tool rather than saying you "
+        "don't have the information."
+    )
+    msgs = _to_messages(user_input, None, trace_prompt)
+
+    try:
+        result = await agent.ainvoke({"messages": msgs})
+    except Exception as e:
+        logger.error("run_agent_with_trace failed: %s", e)
+        return {"error": str(e), "steps": [], "answer": None, "tool_count": len(tools)}
+
+    steps = []
+    for m in result.get("messages", []):
+        mtype = getattr(m, "type", None)
+        if mtype == "ai":
+            for tc in (getattr(m, "tool_calls", None) or []):
+                steps.append({"kind": "tool_call", "tool": tc.get("name"), "args": tc.get("args")})
+        elif mtype == "tool":
+            steps.append({"kind": "tool_result", "tool": getattr(m, "name", None), "content": str(m.content)})
+
+    return {
+        "error": None,
+        "steps": steps,
+        "answer": _last_answer(result.get("messages", [])),
+        "tool_count": len(tools),
+        "tool_names": [t.name for t in tools],
+    }
+
+
 async def run_agent(
     user_input: str,
     history=None,
