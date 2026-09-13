@@ -29,7 +29,12 @@ async def run(url: str, farmer_id: str) -> int:
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
-    async with streamable_http_client(url) as (read, write):
+    # mcp 1.x's streamable_http_client yields a 3-tuple (read, write,
+    # get_session_id) — 2.x (briefly used in Phases 1-4 before the
+    # langchain-mcp-adapters downgrade) yielded only (read, write). If this
+    # ever breaks again with "too many/few values to unpack", check which
+    # mcp major version is installed before assuming the bug is elsewhere.
+    async with streamable_http_client(url) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
 

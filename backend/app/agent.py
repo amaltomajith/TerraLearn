@@ -1,7 +1,8 @@
 import os
 import re
 import json
-import time
+import copy
+import asyncio
 import logging
 from typing import Optional
 import httpx
@@ -9,7 +10,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.tools import StructuredTool
 from langgraph.prebuilt import create_react_agent
+from langchain_mcp_adapters.client import MultiServerMCPClient
 from app.tools import get_climate_aqi_data, get_environmental_knowledge
 
 logger = logging.getLogger(__name__)
@@ -251,6 +254,92 @@ def _get_agent(api_key: str, base_url: str, model: str):
     return _AGENT_CACHE[key]
 
 
+# ---------------------------------------------------------------------------
+# Farmer/Buyer MCP tools (Phase 5) — role-scoped, identity-bound.
+#
+# Identity binding: MCP tools take farmer_id/buyer_id as a plain argument.
+# Handing that to the LLM as-is would mean trusting the model to always pass
+# the correct id — the same trust-boundary weakness already closed for
+# confirm_* (see farmer_server.py/buyer_server.py's RESOLVED NOTEs), just
+# spread across every read tool instead of three writes. _bind_identity()
+# below removes the id field from the schema the LLM even sees and injects
+# the real value (from the verified request, not the model's output) at call
+# time — the model cannot supply or override it, by construction, not by
+# prompt discipline.
+#
+# Caching: only the per-role TOOL TEMPLATES are cached (_MCP_TOOLS_CACHE) —
+# that's the expensive part (a network round-trip to each MCP server's
+# list_tools()). The identity-bound copies and the ReAct agent itself are
+# built fresh per request instead of cached per (config, role, farmer_id):
+# with a real farmer base in the thousands, caching a full agent per farmer
+# id would grow the process's memory unboundedly on a 512MB Render worker.
+# create_react_agent() does no I/O, so building it fresh per request is cheap.
+# ---------------------------------------------------------------------------
+
+_MCP_TOOLS_CACHE: dict = {}
+
+
+def _mcp_base_url() -> str:
+    # No existing self-referential-URL pattern in this codebase (confirmed
+    # before writing this) — PORT is set by Render's startCommand
+    # (render.yaml) but never read from Python anywhere until now.
+    port = os.getenv("PORT", "8000")
+    return f"http://127.0.0.1:{port}"
+
+
+async def _load_role_mcp_tools(role: Optional[str]) -> list:
+    """Raw (unbound) MCP tool templates for a role, cached per role value.
+    'farmer'/'both' get the Farmer MCP tool set, 'buyer'/'both' get the Buyer
+    MCP set. Any other value (including None) gets neither — fails safe to
+    native-tools-only rather than silently granting both."""
+    if role not in _MCP_TOOLS_CACHE:
+        servers = {}
+        if role in ("farmer", "both"):
+            servers["farmer"] = {"url": f"{_mcp_base_url()}/mcp/farmer/mcp", "transport": "streamable_http"}
+        if role in ("buyer", "both"):
+            servers["buyer"] = {"url": f"{_mcp_base_url()}/mcp/buyer/mcp", "transport": "streamable_http"}
+        if not servers:
+            _MCP_TOOLS_CACHE[role] = []
+        else:
+            try:
+                client = MultiServerMCPClient(servers)
+                _MCP_TOOLS_CACHE[role] = await client.get_tools()
+            except Exception as e:
+                logger.warning("MCP tool loading failed for role=%s (falling back to native tools only): %s", role, e)
+                _MCP_TOOLS_CACHE[role] = []
+    return _MCP_TOOLS_CACHE[role]
+
+
+def _bind_identity(tool, farmer_id: str):
+    """Returns a copy of `tool` with farmer_id/buyer_id removed from the
+    schema the LLM sees and injected server-side at call time. Tools with
+    neither field (e.g. get_mandi_price, which only needs crop_key) are
+    returned unchanged."""
+    schema = tool.args_schema if isinstance(tool.args_schema, dict) else {}
+    properties = schema.get("properties", {})
+    id_field = "farmer_id" if "farmer_id" in properties else ("buyer_id" if "buyer_id" in properties else None)
+    if id_field is None:
+        return tool
+
+    new_schema = copy.deepcopy(schema)
+    new_schema["properties"].pop(id_field, None)
+    new_schema["required"] = [r for r in new_schema.get("required", []) if r != id_field]
+    original_coroutine = tool.coroutine
+
+    async def _wrapped(**kwargs):
+        kwargs[id_field] = farmer_id
+        return await original_coroutine(**kwargs)
+
+    return StructuredTool(name=tool.name, description=tool.description, args_schema=new_schema, coroutine=_wrapped)
+
+
+async def _build_role_scoped_tools(role: Optional[str], farmer_id: Optional[str]) -> list:
+    if not role or not farmer_id:
+        return _TOOLS
+    templates = await _load_role_mcp_tools(role)
+    return _TOOLS + [_bind_identity(t, farmer_id) for t in templates]
+
+
 def _to_messages(user_input: str, history, system_prompt: Optional[str]) -> list:
     """[SystemMessage, *prior turns, HumanMessage(current)]."""
     msgs: list = [SystemMessage(content=system_prompt or SYSTEM_PROMPT)]
@@ -281,11 +370,13 @@ def _last_answer(messages: list) -> Optional[str]:
     return None
 
 
-def _try_fallback(api_key: str, base_url: str, model_name: str, msgs: list) -> Optional[str]:
-    """Attempt execution via the fallback provider (OpenRouter)."""
+async def _try_fallback(api_key: str, base_url: str, model_name: str, msgs: list, tools: list) -> Optional[str]:
+    """Attempt execution via the fallback provider (OpenRouter), using the
+    same (role-scoped, identity-bound) tool list as the primary attempt —
+    tools are provider-agnostic, only the LLM differs."""
     try:
-        fallback_agent = _get_agent(api_key, base_url, model_name)
-        result = fallback_agent.invoke({"messages": msgs})
+        fallback_agent = create_react_agent(_get_llm(api_key, base_url, model_name), tools)
+        result = await fallback_agent.ainvoke({"messages": msgs})
         answer = _last_answer(result.get("messages", []))
         if answer:
             logger.info("served by: openrouter_fallback")
@@ -295,11 +386,23 @@ def _try_fallback(api_key: str, base_url: str, model_name: str, msgs: list) -> O
     return None
 
 
-def run_agent(user_input: str, history=None, system_prompt: Optional[str] = None) -> str:
+async def run_agent(
+    user_input: str,
+    history=None,
+    system_prompt: Optional[str] = None,
+    role: Optional[str] = None,
+    farmer_id: Optional[str] = None,
+) -> str:
     """Run a LangGraph ReAct agent with primary (Groq) and fallback (OpenRouter) providers.
 
     `history` is a list of {"role": "user"|"assistant", "content": str} prior turns
     (the backend stays stateless — the client sends recent history each call).
+
+    `role`/`farmer_id` (Phase 5): when both are present, the agent also gets
+    role-scoped Farmer/Buyer MCP tools, identity-bound so the model can never
+    see or supply the id itself (see _bind_identity's docstring). Absent
+    either one, behavior is byte-for-byte the same as before Phase 5 —
+    native tools only, using the cached agent.
     """
     # Ensure fresh env values on each request
     if env_local_path.exists():
@@ -320,7 +423,15 @@ def run_agent(user_input: str, history=None, system_prompt: Optional[str] = None
         return "API key is not configured. Please set OPENAI_API_KEY in backend/.env."
 
     msgs = _to_messages(user_input, history, system_prompt)
-    agent = _get_agent(api_key, base_url, model_name)
+
+    if role and farmer_id:
+        # Built fresh per request, not cached — see the module docstring
+        # above _MCP_TOOLS_CACHE for why (unbounded per-farmer cache growth).
+        tools = await _build_role_scoped_tools(role, farmer_id)
+        agent = create_react_agent(_get_llm(api_key, base_url, model_name), tools)
+    else:
+        tools = _TOOLS
+        agent = _get_agent(api_key, base_url, model_name)
 
     has_retried_429 = False
     max_tool_attempts = 2
@@ -328,7 +439,7 @@ def run_agent(user_input: str, history=None, system_prompt: Optional[str] = None
     tool_attempt = 1
     while tool_attempt <= max_tool_attempts:
         try:
-            result = agent.invoke({"messages": msgs})
+            result = await agent.ainvoke({"messages": msgs})
             answer = _last_answer(result.get("messages", []))
             if answer:
                 logger.info("served by: groq")
@@ -365,14 +476,14 @@ def run_agent(user_input: str, history=None, system_prompt: Optional[str] = None
                 if not has_retried_429:
                     logger.warning("Groq 429 rate limit hit. Waiting 3 seconds before retrying primary...")
                     has_retried_429 = True
-                    time.sleep(3)
+                    await asyncio.sleep(3)
                     continue  # Single retry on Groq
 
                 # If 429 persists after single retry, attempt fallback if FALLBACK_API_KEY is configured
                 if fallback_api_key:
                     logger.warning("Groq 429 rate limit persisted after retry. Attempting fallback to OpenRouter...")
-                    fallback_result = _try_fallback(
-                        fallback_api_key, fallback_base_url, fallback_model, msgs
+                    fallback_result = await _try_fallback(
+                        fallback_api_key, fallback_base_url, fallback_model, msgs, tools
                     )
                     if fallback_result:
                         return fallback_result
@@ -387,8 +498,8 @@ def run_agent(user_input: str, history=None, system_prompt: Optional[str] = None
                 if fallback_api_key:
                     reason = "model-not-found" if is_model_not_found else "connection/timeout"
                     logger.warning("Groq %s error. Attempting fallback to OpenRouter...", reason)
-                    fallback_result = _try_fallback(
-                        fallback_api_key, fallback_base_url, fallback_model, msgs
+                    fallback_result = await _try_fallback(
+                        fallback_api_key, fallback_base_url, fallback_model, msgs, tools
                     )
                     if fallback_result:
                         return fallback_result
@@ -409,7 +520,7 @@ def run_agent(user_input: str, history=None, system_prompt: Optional[str] = None
                         max_tool_attempts,
                     )
                     try:
-                        fallback_response = _get_llm(api_key, base_url, model_name).invoke(msgs)
+                        fallback_response = await _get_llm(api_key, base_url, model_name).ainvoke(msgs)
                         fallback_text = str(fallback_response.content).strip()
                         logger.info("served by: groq")
                         return (
