@@ -96,6 +96,23 @@ def insert(table: str, rows: list[dict]) -> None:
     r.raise_for_status()
 
 
+def insert_returning(table: str, rows: list[dict]) -> list[dict]:
+    """Same as insert(), but returns the inserted row(s) with server-generated
+    fields (id, created_at, ...) — for write tools that need to hand the
+    created row's real id back to the caller (e.g. confirm_create_lot)."""
+    if not is_configured():
+        raise RuntimeError("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured")
+    if not rows:
+        return []
+    r = _http().post(
+        f"{_SUPABASE_URL}/rest/v1/{table}",
+        headers=_headers({"Prefer": "return=representation"}),
+        json=rows,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
 def upsert(table: str, rows: list[dict], on_conflict: str) -> None:
     """POST /rest/v1/<table> with Prefer: resolution=merge-duplicates.
 

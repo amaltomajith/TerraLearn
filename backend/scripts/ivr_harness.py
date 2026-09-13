@@ -45,9 +45,9 @@ def main() -> int:
     escalations_written = []
     original_escalate = escalation_mod.escalate
 
-    def _spy_escalate(farmer_id, reason, tool_name, raw_query):
+    def _spy_escalate(farmer_id, reason, tool_name, raw_query, **kwargs):
         escalations_written.append({"farmer_id": farmer_id, "reason": reason, "tool_name": tool_name})
-        return original_escalate(farmer_id, reason, tool_name, raw_query)
+        return original_escalate(farmer_id, reason, tool_name, raw_query, **kwargs)
 
     runner_mod.escalate = _spy_escalate
 
