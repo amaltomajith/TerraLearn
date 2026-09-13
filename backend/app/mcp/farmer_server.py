@@ -14,19 +14,20 @@ real caller (Phase 4+), this server needs its own authn/z layer — e.g.
 verifying a phone-number-to-farmer_id mapping for IVR, or a signed session for
 the web client. Do not skip this.
 
-SECOND TRUST-BOUNDARY NOTE, specific to confirm_create_lot (added Phase 3,
-2026-09-13): by explicit user decision, confirm_create_lot is a SECOND MCP
-tool alongside propose_create_lot, not a plain non-MCP-tool function gated
-behind a real UI button click (contrast this with the existing send_message
-pattern in agent.py, where the actual write function is never exposed to the
-LLM as a callable tool at all). This means a future LLM-driven caller (the
-Phase 5 web assistant, once MultiServerMCPClient is wired in) could technically
-invoke confirm_create_lot directly, without a genuine human confirmation in
-front of it. THIS IS AN ACCEPTED RISK FOR NOW, ONLY BECAUSE NO SUCH CALLER
-EXISTS YET. Before Phase 5 connects an LLM-driven caller to this server,
-either (a) scope confirm_create_lot out of that caller's available-tools list
-entirely and have the frontend call it directly on a button click instead, or
-(b) add a real confirmation gate in front of it. Do not skip this.
+RESOLVED NOTE, confirm_create_lot / confirm_respond_to_offer (2026-09-13):
+these were originally built (Phase 3) as SECOND MCP tools alongside their
+propose_* counterparts — an explicitly accepted risk at the time, since a
+future LLM-driven caller could have invoked them directly with no genuine
+human confirmation in front of it. Resolved by removing them from the MCP
+tool surface entirely: they are now plain functions (still fully usable
+in-process, e.g. by IVR's dispatch table), reachable for any external caller
+only via the internal /internal/lots/confirm-create and
+/internal/lots/confirm-offer-response endpoints in app/main.py — never as an
+MCP tool an LLM-driven agent could choose to call. This matches the existing
+send_message pattern in agent.py exactly: the LLM only ever drafts (via
+propose_create_lot / propose_respond_to_offer, which remain MCP tools since
+they have no side effect); the real write is never exposed to the LLM as a
+callable tool at all.
 
 DTMF constraint (spec §3): every tool's arguments are shaped for a short
 sequence of keypad digits where relevant (e.g. listing_type as a small enum,
@@ -365,11 +366,11 @@ def propose_create_lot(farmer_id: str, crop: str, quantity: float, unit: str, gr
     }
 
 
-@mcp.tool()
 def confirm_create_lot(farmer_id: str, crop: str, quantity: float, unit: str, grade: Literal["A", "B", "C"]) -> dict:
-    """Creates the lot for real — see this module's SECOND TRUST-BOUNDARY NOTE
-    above before wiring any LLM-driven caller to this tool. Only meant to be
-    invoked after a human has reviewed a propose_create_lot draft."""
+    """Creates the lot for real — see this module's RESOLVED NOTE above: this
+    is deliberately NOT an MCP tool, only callable in-process or via
+    /internal/lots/confirm-create. Only meant to be invoked after a human has
+    reviewed a propose_create_lot draft."""
     if not owner.farmer_exists(farmer_id):
         return {"available": False, "reason": "farmer not found"}
     if quantity <= 0:
@@ -421,10 +422,11 @@ def propose_respond_to_offer(farmer_id: str, lot_id: str, offer_id: str, action:
     }
 
 
-@mcp.tool()
 def confirm_respond_to_offer(farmer_id: str, lot_id: str, offer_id: str, action: Literal["accept", "decline"]) -> dict:
-    """Applies the response for real — see this module's SECOND TRUST-BOUNDARY
-    NOTE above. On 'accept', also matches the lot to the buyer."""
+    """Applies the response for real — deliberately NOT an MCP tool (see this
+    module's RESOLVED NOTE above), only callable in-process or via
+    /internal/lots/confirm-offer-response. On 'accept', also matches the lot
+    to the buyer."""
     lot = owner.get_lot(lot_id)
     if not lot or lot["seller_id"] != farmer_id:
         return {"available": False, "reason": "lot not found, or this farmer is not its seller"}

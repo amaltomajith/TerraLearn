@@ -35,11 +35,20 @@ async def run(url: str, buyer_id: str) -> int:
             print(f"[list_tools] {len(tools)} tools: {[t.name for t in tools]}")
             expected = {
                 "get_buyer_profile", "verify_gstin", "post_demand", "search_lots",
-                "propose_make_offer", "confirm_make_offer", "get_lot_provenance",
+                "propose_make_offer", "get_lot_provenance",
                 "track_payment_status", "raise_dispute", "get_dispute_status",
             }
-            missing = expected - {t.name for t in tools}
-            print("[PASS]" if not missing else "[FAIL]", f"all {len(expected)} expected tools present" if not missing else f"missing: {missing}")
+            # confirm_make_offer is deliberately NOT an MCP tool (see
+            # buyer_server.py's RESOLVED NOTE) — only reachable in-process or
+            # via /internal/offers/confirm-make. Its absence is the point.
+            not_expected = {"confirm_make_offer"}
+            present_names = {t.name for t in tools}
+            missing = expected - present_names
+            leaked = not_expected & present_names
+            ok = not missing and not leaked
+            print("[PASS]" if ok else "[FAIL]",
+                  f"all {len(expected)} expected tools present, confirm_make_offer correctly absent" if ok
+                  else f"missing: {missing}, unexpectedly present: {leaked}")
 
             print()
             print("[call verify_gstin] pure format+checksum, no external call")
@@ -51,7 +60,7 @@ async def run(url: str, buyer_id: str) -> int:
             result = await session.call_tool("get_buyer_profile", {"buyer_id": buyer_id})
             print(" ->", result.content[0].text if result.content else result)
 
-    return 0 if not missing else 1
+    return 0 if ok else 1
 
 
 def main() -> int:

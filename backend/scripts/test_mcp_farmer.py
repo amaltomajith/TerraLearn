@@ -39,11 +39,20 @@ async def run(url: str, farmer_id: str) -> int:
                 "get_farm_snapshot", "get_crop_advisory", "get_crop_calendar",
                 "get_nearby_ifs_matches", "get_nearby_listings", "get_mandi_price",
                 "get_my_tasks", "get_lot_status",
-                "propose_create_lot", "confirm_create_lot", "request_human_escalation",
-                "propose_respond_to_offer", "confirm_respond_to_offer",
+                "propose_create_lot", "request_human_escalation", "propose_respond_to_offer",
             }
-            missing = expected - {t.name for t in tools}
-            print("[PASS]" if not missing else "[FAIL]", f"all {len(expected)} expected tools present" if not missing else f"missing: {missing}")
+            # confirm_create_lot / confirm_respond_to_offer are deliberately NOT
+            # MCP tools (see farmer_server.py's RESOLVED NOTE) — only reachable
+            # in-process or via /internal/lots/confirm-*. Their absence here is
+            # the whole point, not an oversight.
+            not_expected = {"confirm_create_lot", "confirm_respond_to_offer"}
+            present_names = {t.name for t in tools}
+            missing = expected - present_names
+            leaked = not_expected & present_names
+            ok = not missing and not leaked
+            print("[PASS]" if ok else "[FAIL]",
+                  f"all {len(expected)} expected tools present, confirm_* correctly absent" if ok
+                  else f"missing: {missing}, unexpectedly present: {leaked}")
 
             print()
             print("[call get_mandi_price] (cheapest, no farmer-scoped RLS complexity)")
@@ -63,7 +72,7 @@ async def run(url: str, farmer_id: str) -> int:
             result2 = await session.call_tool("get_my_tasks", {"farmer_id": farmer_id})
             print(" -> get_my_tasks(farmer_id) =", result2.content[0].text if result2.content else result2)
 
-    return 0 if not missing else 1
+    return 0 if ok else 1
 
 
 def main() -> int:
