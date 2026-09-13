@@ -30,18 +30,31 @@ class RefreshResult:
     errors: list[str] = field(default_factory=list)
 
 
-def _fetch_one(client: httpx.Client, key: str, commodity: str, state: str) -> dict | None:
+def _fetch_one(client: httpx.Client, api_key: str, crop_key: str, commodity: str, state: str) -> dict | None:
     """One Agmarknet call for a single (commodity, state) pair. Returns a row
     dict ready to upsert, or None if there is genuinely no data (not an error —
-    Agmarknet frequently has no rows for a given commodity)."""
+    Agmarknet frequently has no rows for a given commodity).
+
+    api_key (the Agmarknet/data.gov.in key) and crop_key (the CROP_DATABASE
+    key, e.g. 'rice') were previously collapsed into one `key` parameter —
+    every real request silently sent the crop_key as the api-key and got a
+    403, caught only by testing against the live endpoint with a real key."""
     params = {
-        "api-key": key,
+        "api-key": api_key,
         "format": "json",
         "limit": "400",
         "filters[commodity]": commodity,
         "filters[state]": state,
     }
-    resp = client.get(_AGMARKNET_URL, params=params, timeout=15.0)
+    # data.gov.in silently hangs (read-timeout, not an error response) on
+    # httpx's default "python-httpx/x.x" User-Agent — confirmed by direct
+    # testing: identical request succeeds in <1s with a curl-like UA and
+    # times out every time without one. Without this header the refresh job
+    # would fail closed correctly (no crash) but NEVER actually succeed.
+    resp = client.get(
+        _AGMARKNET_URL, params=params, timeout=15.0,
+        headers={"User-Agent": "curl/8.12.1", "Accept": "*/*"},
+    )
     resp.raise_for_status()
     data = resp.json()
     rows = data.get("records") or []
@@ -71,7 +84,7 @@ def _fetch_one(client: httpx.Client, key: str, commodity: str, state: str) -> di
 
     return {
         "commodity": commodity,
-        "crop_key": key,
+        "crop_key": crop_key,
         "state": state,
         "market": window[-1]["market"],
         "unit": "ton",
@@ -102,7 +115,7 @@ def refresh_market_prices() -> RefreshResult:
     with httpx.Client(verify=False) as client:
         for crop_key, commodity, state in targets:
             try:
-                row = _fetch_one(client, crop_key, commodity, state)
+                row = _fetch_one(client, api_key, crop_key, commodity, state)
                 if row:
                     rows_to_upsert.append(row)
                 else:
