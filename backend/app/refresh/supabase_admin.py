@@ -113,6 +113,22 @@ def insert_returning(table: str, rows: list[dict]) -> list[dict]:
     return r.json()
 
 
+def patch(table: str, params: dict, data: dict) -> list[dict]:
+    """PATCH /rest/v1/<table>?<params> — updates matching rows, returns them
+    (Prefer: return=representation). For write tools that transition a row's
+    status (e.g. lot_offers.status, lots.status) rather than insert a new one."""
+    if not is_configured():
+        raise RuntimeError("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured")
+    r = _http().patch(
+        f"{_SUPABASE_URL}/rest/v1/{table}",
+        headers=_headers({"Prefer": "return=representation"}),
+        params=params,
+        json=data,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
 def upsert(table: str, rows: list[dict], on_conflict: str) -> None:
     """POST /rest/v1/<table> with Prefer: resolution=merge-duplicates.
 

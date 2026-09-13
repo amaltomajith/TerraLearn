@@ -2,6 +2,7 @@ import app.ssl_patch  # noqa: F401 — must be first; patches SSL before other i
 import asyncio
 import os
 import logging
+import contextlib
 from typing import Optional, List
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,16 +18,21 @@ try:
 except Exception as e:  # pragma: no cover
     logger.warning("RAG module import failed: %s", e)
 
-# Farmer MCP server (Puppeteer MCP spec §3/§9) — must be built BEFORE the
-# FastAPI() app so its lifespan can be shared. Mounting mcp's
+# Farmer + Buyer MCP servers (Puppeteer MCP spec §1/§3/§4) — both built
+# BEFORE the FastAPI() app so their lifespans can be shared. Mounting mcp's
 # streamable_http_app() into an existing app WITHOUT sharing its lifespan
 # fails at request time with "Task group is not initialized. Make sure to use
 # run()." — confirmed by reproducing the failure against the installed mcp
-# SDK version before writing this. A failure here (e.g. mcp not installed yet)
-# degrades to no lifespan / no mount rather than crashing the whole backend —
-# same "never let a secondary feature block the main path" pattern as the RAG
-# import above.
+# SDK version before writing this. Two independent MCPServer instances can be
+# mounted into one FastAPI app by nesting their two lifespan_context managers
+# inside one combined async context manager — also verified directly (both
+# session managers start/stop cleanly, both respond correctly on their own
+# mount path) before writing this, not assumed. A build failure for either
+# server degrades to that one server not mounting rather than crashing the
+# whole backend — same "never let a secondary feature block the main path"
+# pattern as the RAG import above.
 _farmer_mcp_app = None
+_buyer_mcp_app = None
 try:
     from app.mcp.farmer_server import build_farmer_mcp_app
     _farmer_mcp_app = build_farmer_mcp_app()
@@ -34,14 +40,36 @@ try:
 except Exception as e:  # pragma: no cover
     logger.warning("Farmer MCP server build failed (will not be mounted): %s", e)
 
+try:
+    from app.mcp.buyer_server import build_buyer_mcp_app
+    _buyer_mcp_app = build_buyer_mcp_app()
+    logger.info("Buyer MCP server: built, will mount at /mcp/buyer")
+except Exception as e:  # pragma: no cover
+    logger.warning("Buyer MCP server build failed (will not be mounted): %s", e)
+
+
+@contextlib.asynccontextmanager
+async def _mcp_lifespan(app):
+    """Combines whichever of the two MCP sub-apps actually built into one
+    lifespan for FastAPI(lifespan=...), which only accepts one."""
+    async with contextlib.AsyncExitStack() as stack:
+        if _farmer_mcp_app is not None:
+            await stack.enter_async_context(_farmer_mcp_app.router.lifespan_context(_farmer_mcp_app))
+        if _buyer_mcp_app is not None:
+            await stack.enter_async_context(_buyer_mcp_app.router.lifespan_context(_buyer_mcp_app))
+        yield
+
+
 app = FastAPI(
     title="TerraLearn Environmental Agent API",
     version="1.0.0",
-    lifespan=_farmer_mcp_app.router.lifespan_context if _farmer_mcp_app else None,
+    lifespan=_mcp_lifespan if (_farmer_mcp_app or _buyer_mcp_app) else None,
 )
 
 if _farmer_mcp_app is not None:
     app.mount("/mcp/farmer", _farmer_mcp_app)
+if _buyer_mcp_app is not None:
+    app.mount("/mcp/buyer", _buyer_mcp_app)
 
 app.add_middleware(
     CORSMiddleware,

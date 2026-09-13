@@ -12,7 +12,7 @@ farmer_id and applies the ownership filter itself. There is no database-level
 safety net in this path — the caller of an MCP tool is trusted to pass the
 correct farmer_id.
 """
-from app.refresh.supabase_admin import select, rpc, insert, insert_returning, is_configured  # noqa: F401
+from app.refresh.supabase_admin import select, rpc, insert, insert_returning, patch, is_configured  # noqa: F401
 
 
 def farmer_exists(farmer_id: str) -> bool:
@@ -20,6 +20,47 @@ def farmer_exists(farmer_id: str) -> bool:
     farmer_id instead of surfacing a raw FK-violation exception."""
     rows = select("farmers", params={"id": f"eq.{farmer_id}", "select": "id", "limit": "1"})
     return bool(rows)
+
+
+def get_farmer(farmer_id: str) -> dict | None:
+    """Used by get_buyer_profile — farmers.gstin/gstin_verified/role/name."""
+    rows = select("farmers", params={"id": f"eq.{farmer_id}", "limit": "1"})
+    return rows[0] if rows else None
+
+
+def get_lot(lot_id: str) -> dict | None:
+    """Any lot by id, unscoped by party — used by tools where either side
+    (or a browsing buyer) needs the lot's current state: confirm_make_offer,
+    propose/confirm_respond_to_offer, raise_dispute, get_dispute_status."""
+    rows = select("lots", params={"id": f"eq.{lot_id}", "limit": "1"})
+    return rows[0] if rows else None
+
+
+def update_lot_status(lot_id: str, status: str, buyer_id: str | None = None, price_per_unit: float | None = None) -> dict:
+    data = {"status": status}
+    if buyer_id is not None:
+        data["buyer_id"] = buyer_id
+    if price_per_unit is not None:
+        data["price_per_unit"] = price_per_unit
+    rows = patch("lots", params={"id": f"eq.{lot_id}"}, data=data)
+    return rows[0]
+
+
+def insert_lot_offer(lot_id: str, buyer_id: str, price: float, quantity: float) -> dict:
+    rows = insert_returning("lot_offers", [{
+        "lot_id": lot_id, "buyer_id": buyer_id, "price": price, "quantity": quantity, "status": "pending",
+    }])
+    return rows[0]
+
+
+def get_lot_offer(offer_id: str) -> dict | None:
+    rows = select("lot_offers", params={"id": f"eq.{offer_id}", "limit": "1"})
+    return rows[0] if rows else None
+
+
+def update_lot_offer_status(offer_id: str, status: str) -> dict:
+    rows = patch("lot_offers", params={"id": f"eq.{offer_id}"}, data={"status": status})
+    return rows[0]
 
 
 def insert_lot(seller_id: str, crop: str, quantity: float, unit: str, grade: str) -> dict:
@@ -107,3 +148,17 @@ def lots_for_farmer(farmer_id: str, lot_id: str | None = None) -> list[dict]:
 
 def lot_events(lot_id: str) -> list[dict]:
     return select("lot_events", params={"lot_id": f"eq.{lot_id}", "order": "created_at.asc"})
+
+
+def insert_returning_lot_event(lot_id: str, event_type: str, actor_id: str | None, detail: dict | None = None) -> dict:
+    """Like insert_lot_event, but returns the created row (its id doubles as
+    dispute_id for raise_dispute/get_dispute_status)."""
+    rows = insert_returning("lot_events", [{
+        "lot_id": lot_id, "event_type": event_type, "actor_id": actor_id, "detail": detail or {},
+    }])
+    return rows[0]
+
+
+def get_lot_event(event_id: str) -> dict | None:
+    rows = select("lot_events", params={"id": f"eq.{event_id}", "limit": "1"})
+    return rows[0] if rows else None
