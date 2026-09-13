@@ -334,6 +334,59 @@ async def ivr_simulate_endpoint(req: IVRSimulateRequest, x_internal_token: Optio
     }
 
 
+# ---------------------------------------------------------------------------
+# confirm_* endpoints — the real writes behind the propose/confirm split.
+# Deliberately NOT MCP tools (see farmer_server.py / buyer_server.py's
+# RESOLVED NOTEs): an LLM-driven caller has no tool it could invoke to
+# execute one of these; only a genuine human action (a UI button click, or
+# an IVR confirm-keypress once Phase 6 wires it up) reaches them, exactly
+# like sendMessage() in src/lib/saath/queries.ts is never exposed to the LLM
+# as a callable tool either.
+# ---------------------------------------------------------------------------
+
+class ConfirmCreateLotRequest(BaseModel):
+    farmer_id: str
+    crop: str
+    quantity: float
+    unit: str
+    grade: str
+
+
+@app.post("/internal/lots/confirm-create")
+async def confirm_create_lot_endpoint(req: ConfirmCreateLotRequest, x_internal_token: Optional[str] = Header(default=None)):
+    _check_internal_token(x_internal_token)
+    from app.mcp.farmer_server import confirm_create_lot
+    return await asyncio.to_thread(confirm_create_lot, req.farmer_id, req.crop, req.quantity, req.unit, req.grade)
+
+
+class ConfirmOfferResponseRequest(BaseModel):
+    farmer_id: str
+    lot_id: str
+    offer_id: str
+    action: str
+
+
+@app.post("/internal/lots/confirm-offer-response")
+async def confirm_offer_response_endpoint(req: ConfirmOfferResponseRequest, x_internal_token: Optional[str] = Header(default=None)):
+    _check_internal_token(x_internal_token)
+    from app.mcp.farmer_server import confirm_respond_to_offer
+    return await asyncio.to_thread(confirm_respond_to_offer, req.farmer_id, req.lot_id, req.offer_id, req.action)
+
+
+class ConfirmMakeOfferRequest(BaseModel):
+    buyer_id: str
+    lot_id: str
+    price: float
+    quantity: float
+
+
+@app.post("/internal/offers/confirm-make")
+async def confirm_make_offer_endpoint(req: ConfirmMakeOfferRequest, x_internal_token: Optional[str] = Header(default=None)):
+    _check_internal_token(x_internal_token)
+    from app.mcp.buyer_server import confirm_make_offer
+    return await asyncio.to_thread(confirm_make_offer, req.buyer_id, req.lot_id, req.price, req.quantity)
+
+
 @app.post("/api/ask", response_model=AskResponse)
 async def ask_question(req: AskRequest):
     try:

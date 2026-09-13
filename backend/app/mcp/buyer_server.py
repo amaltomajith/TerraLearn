@@ -10,10 +10,14 @@ tool takes buyer_id as a plain argument, and several use the service-role key
 to write. This server is the trust boundary, not the database. Acceptable
 only while this server stays internal/unwired (no real caller yet).
 
-SECOND TRUST-BOUNDARY NOTE, specific to confirm_make_offer (same accepted
-risk as farmer_server.py's confirm_create_lot/confirm_respond_to_offer): it
-is a second callable MCP tool, not a plain non-MCP-tool function. Must be
-revisited before Phase 5 wires an LLM-driven caller to this server.
+RESOLVED NOTE, confirm_make_offer (2026-09-13): originally built (Phase 4) as
+a second MCP tool alongside propose_make_offer — an explicitly accepted risk
+at the time, same as farmer_server.py's confirm_create_lot/
+confirm_respond_to_offer. Resolved the same way: confirm_make_offer is no
+longer an MCP tool. It's a plain function now, reachable for any external
+caller only via POST /internal/offers/confirm-make in app/main.py — never as
+a tool an LLM-driven agent could choose to call. propose_make_offer remains
+an MCP tool since it's side-effect-free.
 
 Never expose, from this server: a farmer's phone number, exact home address,
 or any contact detail beyond what's needed for a transaction already in
@@ -182,10 +186,10 @@ def propose_make_offer(buyer_id: str, lot_id: str, price: float, quantity: float
     }
 
 
-@mcp.tool()
 def confirm_make_offer(buyer_id: str, lot_id: str, price: float, quantity: float) -> dict:
-    """Creates the offer for real — see this module's SECOND TRUST-BOUNDARY
-    NOTE above before wiring any LLM-driven caller to this tool."""
+    """Creates the offer for real — deliberately NOT an MCP tool (see this
+    module's RESOLVED NOTE above), only callable in-process or via
+    /internal/offers/confirm-make."""
     if not owner.farmer_exists(buyer_id):
         return {"available": False, "reason": "buyer not found"}
     lot = owner.get_lot(lot_id)
