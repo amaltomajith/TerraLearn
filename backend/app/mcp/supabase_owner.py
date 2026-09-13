@@ -12,7 +12,37 @@ farmer_id and applies the ownership filter itself. There is no database-level
 safety net in this path — the caller of an MCP tool is trusted to pass the
 correct farmer_id.
 """
-from app.refresh.supabase_admin import select, rpc, is_configured  # noqa: F401
+from app.refresh.supabase_admin import select, rpc, insert, insert_returning, is_configured  # noqa: F401
+
+
+def farmer_exists(farmer_id: str) -> bool:
+    """Used by write tools (confirm_create_lot) to fail cleanly on a bad
+    farmer_id instead of surfacing a raw FK-violation exception."""
+    rows = select("farmers", params={"id": f"eq.{farmer_id}", "select": "id", "limit": "1"})
+    return bool(rows)
+
+
+def insert_lot(seller_id: str, crop: str, quantity: float, unit: str, grade: str) -> dict:
+    """The actual write behind confirm_create_lot. Returns the created row
+    (including its server-generated id) via Prefer: return=representation."""
+    rows = insert_returning("lots", [{
+        "seller_id": seller_id,
+        "crop": crop,
+        "quantity": quantity,
+        "unit": unit,
+        "grade": grade,
+        "status": "open",
+    }])
+    return rows[0]
+
+
+def insert_lot_event(lot_id: str, event_type: str, actor_id: str | None, detail: dict | None = None) -> None:
+    insert("lot_events", [{
+        "lot_id": lot_id,
+        "event_type": event_type,
+        "actor_id": actor_id,
+        "detail": detail or {},
+    }])
 
 
 def farms_for_farmer(farmer_id: str) -> list[dict]:

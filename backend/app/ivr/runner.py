@@ -36,12 +36,12 @@ class IVRResult:
 
 def handle_ivr_turn(farmer_id: str, keypress: str, language: str = "kn") -> IVRResult:
     if keypress == ESCALATION_KEYPRESS:
-        escalate(farmer_id, reason="farmer_requested", tool_name=None, raw_query=keypress)
+        escalate(farmer_id, reason="farmer_requested", tool_name=None, raw_query=keypress, channel="ivr")
         return IVRResult(tier="tier3", text="Connecting you to a person now.")
 
     entry = DISPATCH.get(keypress)
     if entry is None:
-        escalate(farmer_id, reason="no_match", tool_name=None, raw_query=keypress)
+        escalate(farmer_id, reason="no_match", tool_name=None, raw_query=keypress, channel="ivr")
         return IVRResult(tier="tier3", text="I didn't understand that. Connecting you to a person now.")
 
     try:
@@ -49,7 +49,7 @@ def handle_ivr_turn(farmer_id: str, keypress: str, language: str = "kn") -> IVRR
         tool_result = entry.tool_fn(**args)
     except Exception as e:
         logger.error("IVR tool %s raised: %s", entry.tool_name, e)
-        escalate(farmer_id, reason="tool_error", tool_name=entry.tool_name, raw_query=keypress)
+        escalate(farmer_id, reason="tool_error", tool_name=entry.tool_name, raw_query=keypress, channel="ivr")
         return IVRResult(tier="tier3", text="Something went wrong. Connecting you to a person now.",
                           tool_name=entry.tool_name)
 

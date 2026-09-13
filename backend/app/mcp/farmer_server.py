@@ -1,6 +1,6 @@
 """
-Farmer MCP server (Puppeteer MCP spec §3, Phase 2: read-only tools only).
-Mounted at /mcp/farmer in app/main.py, streamable-HTTP transport.
+Farmer MCP server (Puppeteer MCP spec §3). Mounted at /mcp/farmer in
+app/main.py, streamable-HTTP transport.
 
 CRITICAL TRUST-BOUNDARY NOTE — read before wiring any new caller to this
 server: every tool below takes farmer_id as a plain argument rather than
@@ -10,18 +10,33 @@ TOOL LAYER ITSELF is the trust boundary here, not the database — whatever
 calls these tools is implicitly trusted to pass the correct farmer_id. This is
 acceptable ONLY because this server is kept internal/unwired this pass (no
 live IVR, no Buyer MCP, no web client pointed at it). Before connecting any
-real caller (Phase 3+), this server needs its own authn/z layer — e.g.
+real caller (Phase 4+), this server needs its own authn/z layer — e.g.
 verifying a phone-number-to-farmer_id mapping for IVR, or a signed session for
-the web client. Do not skip this when Phase 3 work starts.
+the web client. Do not skip this.
+
+SECOND TRUST-BOUNDARY NOTE, specific to confirm_create_lot (added Phase 3,
+2026-09-13): by explicit user decision, confirm_create_lot is a SECOND MCP
+tool alongside propose_create_lot, not a plain non-MCP-tool function gated
+behind a real UI button click (contrast this with the existing send_message
+pattern in agent.py, where the actual write function is never exposed to the
+LLM as a callable tool at all). This means a future LLM-driven caller (the
+Phase 5 web assistant, once MultiServerMCPClient is wired in) could technically
+invoke confirm_create_lot directly, without a genuine human confirmation in
+front of it. THIS IS AN ACCEPTED RISK FOR NOW, ONLY BECAUSE NO SUCH CALLER
+EXISTS YET. Before Phase 5 connects an LLM-driven caller to this server,
+either (a) scope confirm_create_lot out of that caller's available-tools list
+entirely and have the frontend call it directly on a button click instead, or
+(b) add a real confirmation gate in front of it. Do not skip this.
 
 DTMF constraint (spec §3): every tool's arguments are shaped for a short
 sequence of keypad digits where relevant (e.g. listing_type as a small enum,
-never free text) — the same tool contract serves the (future) IVR path and the
-richer web assistant.
+grade as 'A'|'B'|'C' -> digits 1/2/3, never free text) — the same tool
+contract serves the (future) IVR path and the richer web assistant.
 """
 import os
 import logging
 from datetime import date, datetime
+from typing import Literal
 
 import httpx
 from mcp.server.mcpserver import MCPServer
@@ -33,6 +48,7 @@ from app.rules.crop_database import CROP_DATABASE
 from app.rules.crop_calendar import build_crop_timeline
 from app.rules.advisories import crop_advisories, AdvisoryInput, ClimateInput, SoilInput
 from app.soil import get_soil_data
+from app.ivr.escalation import escalate
 
 logger = logging.getLogger(__name__)
 
@@ -323,3 +339,72 @@ def get_lot_status(farmer_id: str, lot_id: str | None = None) -> dict | list[dic
         {"id": l["id"], "crop": l["crop"], "quantity": l["quantity"], "unit": l["unit"], "status": l["status"]}
         for l in lots
     ]
+
+
+@mcp.tool()
+def propose_create_lot(farmer_id: str, crop: str, quantity: float, unit: str, grade: Literal["A", "B", "C"]) -> dict:
+    """Drafts a lot listing — does NOT create it. Returns the exact fields
+    confirm_create_lot would insert, for a human (farmer, on IVR or web) to
+    review before confirming. No write happens here."""
+    if not owner.farmer_exists(farmer_id):
+        return {"available": False, "reason": "farmer not found"}
+    if quantity <= 0:
+        return {"available": False, "reason": "quantity must be greater than 0"}
+    return {
+        "available": True,
+        "requires_confirmation": True,
+        "draft": {
+            "seller_id": farmer_id,
+            "crop": crop,
+            "quantity": quantity,
+            "unit": unit,
+            "grade": grade,
+            "status": "open",
+        },
+        "message": f"Draft lot: {quantity} {unit} of {crop}, grade {grade}. Not created yet — confirm to list it.",
+    }
+
+
+@mcp.tool()
+def confirm_create_lot(farmer_id: str, crop: str, quantity: float, unit: str, grade: Literal["A", "B", "C"]) -> dict:
+    """Creates the lot for real — see this module's SECOND TRUST-BOUNDARY NOTE
+    above before wiring any LLM-driven caller to this tool. Only meant to be
+    invoked after a human has reviewed a propose_create_lot draft."""
+    if not owner.farmer_exists(farmer_id):
+        return {"available": False, "reason": "farmer not found"}
+    if quantity <= 0:
+        return {"available": False, "reason": "quantity must be greater than 0"}
+
+    try:
+        lot = owner.insert_lot(seller_id=farmer_id, crop=crop, quantity=quantity, unit=unit, grade=grade)
+    except Exception as e:
+        logger.error("confirm_create_lot insert failed: %s", e)
+        return {"available": False, "reason": "could not create lot"}
+
+    try:
+        owner.insert_lot_event(
+            lot_id=lot["id"], event_type="created", actor_id=farmer_id,
+            detail={"quantity": quantity, "unit": unit, "grade": grade},
+        )
+    except Exception as e:
+        # The lot itself was created successfully — a missing audit event is
+        # logged, not surfaced as a failure to the farmer (their lot is real).
+        logger.error("lot_events insert failed for lot %s: %s", lot["id"], e)
+
+    return {
+        "available": True,
+        "lot": {k: lot[k] for k in ("id", "crop", "quantity", "unit", "grade", "status")},
+        "message": f"Lot created: {quantity} {unit} of {crop}, grade {grade}.",
+    }
+
+
+@mcp.tool()
+def request_human_escalation(farmer_id: str, context: str) -> dict:
+    """Escalates to a human — independent of whichever tier/tool was active.
+    No confirmation gate: asking for help is inherently safe, unlike a
+    financial commitment (contrast with confirm_create_lot above). Reuses the
+    same escalate() function the IVR Tier-3 path already uses."""
+    ok = escalate(farmer_id, reason="farmer_requested", tool_name=None, raw_query=context)
+    if not ok:
+        return {"available": False, "reason": "could not record escalation, but flagged for follow-up"}
+    return {"available": True, "message": "A person will follow up with you."}

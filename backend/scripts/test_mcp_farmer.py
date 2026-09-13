@@ -39,9 +39,10 @@ async def run(url: str, farmer_id: str) -> int:
                 "get_farm_snapshot", "get_crop_advisory", "get_crop_calendar",
                 "get_nearby_ifs_matches", "get_nearby_listings", "get_mandi_price",
                 "get_my_tasks", "get_lot_status",
+                "propose_create_lot", "confirm_create_lot", "request_human_escalation",
             }
             missing = expected - {t.name for t in tools}
-            print("[PASS]" if not missing else "[FAIL]", "all 8 expected tools present" if not missing else f"missing: {missing}")
+            print("[PASS]" if not missing else "[FAIL]", f"all {len(expected)} expected tools present" if not missing else f"missing: {missing}")
 
             print()
             print("[call get_mandi_price] (cheapest, no farmer-scoped RLS complexity)")

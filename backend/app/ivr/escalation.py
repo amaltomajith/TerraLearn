@@ -10,16 +10,26 @@ from app.refresh import supabase_admin as db
 logger = logging.getLogger(__name__)
 
 
-def escalate(farmer_id: str | None, reason: str, tool_name: str | None, raw_query: str) -> bool:
+def escalate(
+    farmer_id: str | None, reason: str, tool_name: str | None, raw_query: str,
+    channel: str = "other",
+) -> bool:
     """Returns True if the escalation was recorded. Never raises — a failure
     to log an escalation must not prevent the farmer from being told a human
-    will help; it's logged server-side for visibility instead."""
+    will help; it's logged server-side for visibility instead.
+
+    channel defaults to 'other' (matches the escalation_requests check
+    constraint: 'ivr'|'web'|'other') since this function is called both by
+    the IVR runner (which passes 'ivr' explicitly) and by
+    request_human_escalation, a general Farmer MCP tool with no inherent
+    channel of its own — hardcoding 'ivr' here would mislabel every non-IVR
+    caller."""
     try:
         db.insert(
             "escalation_requests",
             [{
                 "farmer_id": farmer_id,
-                "channel": "ivr",
+                "channel": channel,
                 "reason": reason,
                 "tool_name": tool_name,
                 "raw_query": raw_query,
