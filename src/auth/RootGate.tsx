@@ -12,6 +12,7 @@ import { RequireOnboarding } from './RequireOnboarding';
 const SaathApp = lazy(() => import('@/components/saath/SaathApp'));
 const CascadeApp = lazy(() => import('@/components/cascade/CascadeApp'));
 const VayuApp = lazy(() => import('@/components/vayu/VayuApp'));
+const McpTraceApp = lazy(() => import('@/components/mcptrace/McpTraceApp'));
 const TeamPanel = lazy(() => import('@/components/farm/TeamPanel'));
 const JoinFarm = lazy(() => import('@/components/farm/JoinFarm'));
 
@@ -85,6 +86,17 @@ export function RootGate() {
                         element={
                           <Suspense fallback={<BrandSplash label="Loading Vayu…" />}>
                             <VayuApp />
+                          </Suspense>
+                        }
+                      />
+                      {/* Dev-only: not linked from any nav, reachable directly at
+                          /mcp-trace to verify the Farmer/Buyer MCP servers' tool
+                          selection reasoning. */}
+                      <Route
+                        path="/mcp-trace"
+                        element={
+                          <Suspense fallback={<BrandSplash label="Loading…" />}>
+                            <McpTraceApp />
                           </Suspense>
                         }
                       />
