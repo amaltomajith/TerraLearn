@@ -292,10 +292,21 @@ def get_nearby_listings(farmer_id: str, listing_type: str | None = None, radius_
 @mcp.tool()
 def get_mandi_price(crop_key: str, state: str | None = None) -> dict:
     """Latest refreshed mandi price for a crop — reads market_prices_cache,
-    never a live Agmarknet call. crop_key is a CROP_DATABASE key (e.g. 'rice')."""
+    never a live Agmarknet call. crop_key is a CROP_DATABASE key (e.g. 'rice').
+
+    Tries the exact key first, then a singular/plural variant — an LLM-driven
+    caller reliably guesses the right crop but not always CROP_DATABASE's
+    exact convention (e.g. 'onion' vs the real key 'onions'), and this table
+    has genuine no-fuzzy-matching-needed exceptions on both sides (rice,
+    wheat are singular; onions, potatoes are plural). Caught by testing a
+    real agent run against real cached data, not assumed."""
     from app.refresh.targets import CROP_TO_AGMARKNET_COMMODITY, market_refresh_state
 
-    commodity = CROP_TO_AGMARKNET_COMMODITY.get(crop_key.lower())
+    key = crop_key.lower().strip()
+    commodity = CROP_TO_AGMARKNET_COMMODITY.get(key)
+    if not commodity:
+        alt = key[:-1] if key.endswith("s") else key + "s"
+        commodity = CROP_TO_AGMARKNET_COMMODITY.get(alt)
     if not commodity:
         return {"available": False, "reason": f"no Agmarknet mapping for crop_key '{crop_key}'"}
     target_state = state or market_refresh_state()
