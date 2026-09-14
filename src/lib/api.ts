@@ -840,18 +840,30 @@ export async function fetchSoilData(lat: number, lng: number, opts?: FetchOpts):
       let pH = 6.5;
       let nitrogen = 40;
       let phosphorus = 25;
+      let gotRealValue = false;
 
       for (const layer of properties) {
         const meanValue = layer.depths?.[0]?.values?.mean;
-        if (layer.name === 'phh2o' && meanValue != null) {
+        if (meanValue == null) continue;
+        gotRealValue = true;
+        if (layer.name === 'phh2o') {
           pH = Math.round((meanValue / 10) * 10) / 10;
         }
-        if (layer.name === 'nitrogen' && meanValue != null) {
+        if (layer.name === 'nitrogen') {
           nitrogen = Math.round(meanValue / 10);
         }
-        if (layer.name === 'soc' && meanValue != null) {
+        if (layer.name === 'soc') {
           phosphorus = Math.round(meanValue / 20);
         }
+      }
+
+      // ISRIC has genuine coverage gaps — confirmed live: a real rural
+      // Karnataka coordinate returns HTTP 200 with every layer's mean null.
+      // Without this check, that response fell through to the hardcoded
+      // defaults above while still being labeled source: 'isric' —
+      // presenting fabricated placeholder numbers as real measured data.
+      if (!gotRealValue) {
+        throw new Error('SoilGrids returned no measured values for this coordinate');
       }
 
       const potassium = Math.round(100 + (nitrogen * 1.5) + (phosphorus * 2));

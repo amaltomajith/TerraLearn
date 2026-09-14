@@ -10,6 +10,7 @@ Every exception is caught here — a refresh failure must never raise past the
 """
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 import httpx
 
@@ -51,6 +52,14 @@ def _fetch_one(client: httpx.Client, lat: float, lng: float) -> dict:
         "precipitation_mm": current.get("precipitation"),
         "wind_speed_kmh": current.get("wind_speed_10m"),
         "payload": current,
+        # The table default (`now()`) only fires on INSERT, not on the
+        # merge-duplicates UPDATE this module's upsert() does on every
+        # subsequent refresh — without an explicit value here, fetched_at
+        # silently freezes at first-insert time despite genuinely fresh data
+        # being written. Contradicts this module's own docstring claim above;
+        # found by running a live refresh and confirming fetched_at didn't
+        # move even though temperature_c changed to a new live value.
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
     }
 
 

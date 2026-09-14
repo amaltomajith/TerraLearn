@@ -109,17 +109,28 @@ def get_soil_data(lat: float, lng: float) -> SoilData:
             layers = (data.get("properties") or {}).get("layers") or []
 
             ph, nitrogen, phosphorus = 6.5, 40.0, 25.0
+            got_real_value = False
             for layer in layers:
                 depths = layer.get("depths") or []
                 mean_value = depths[0].get("values", {}).get("mean") if depths else None
                 if mean_value is None:
                     continue
+                got_real_value = True
                 if layer.get("name") == "phh2o":
                     ph = round((mean_value / 10) * 10) / 10
                 elif layer.get("name") == "nitrogen":
                     nitrogen = round(mean_value / 10)
                 elif layer.get("name") == "soc":
                     phosphorus = round(mean_value / 20)
+
+            # ISRIC has genuine coverage gaps (confirmed live: a real rural
+            # Karnataka coordinate returned HTTP 200 with every layer's mean
+            # null). Without this check, that response fell through to the
+            # hardcoded defaults above while still being labeled source="isric"
+            # — presenting fabricated placeholder numbers as real measured
+            # data. Treat "no layer had a value" the same as a fetch failure.
+            if not got_real_value:
+                raise RuntimeError("SoilGrids returned no measured values for this coordinate")
 
             potassium = round(100 + (nitrogen * 1.5) + (phosphorus * 2))
             return SoilData(
