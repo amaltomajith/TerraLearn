@@ -198,7 +198,7 @@ def extract_action(text: str):
 def log_provider_config():
     """Log masked runtime LLM provider configuration at startup for debugging."""
     primary_key = os.getenv("OPENAI_API_KEY", "")
-    primary_model = os.getenv("OPENAI_MODEL", "llama-3.3-70b-versatile")
+    primary_model = os.getenv("OPENAI_MODEL", "openai/gpt-oss-120b")
     fallback_key = os.getenv("FALLBACK_API_KEY", "").strip()
     fallback_url = os.getenv("FALLBACK_BASE_URL", "https://openrouter.ai/api/v1").strip()
     fallback_model = os.getenv("FALLBACK_MODEL", "meta-llama/llama-3.3-70b-instruct").strip()
@@ -408,7 +408,7 @@ async def run_agent_with_trace(
 
     api_key = os.getenv("OPENAI_API_KEY", "")
     base_url = os.getenv("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
-    model_name = os.getenv("OPENAI_MODEL", "llama-3.3-70b-versatile")
+    model_name = os.getenv("OPENAI_MODEL", "openai/gpt-oss-120b")
     if not api_key:
         return {"error": "OPENAI_API_KEY is not configured.", "steps": [], "answer": None}
 
@@ -480,7 +480,7 @@ async def run_agent(
     # Primary config
     api_key = os.getenv("OPENAI_API_KEY", "")
     base_url = os.getenv("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
-    model_name = os.getenv("OPENAI_MODEL", "llama-3.3-70b-versatile")
+    model_name = os.getenv("OPENAI_MODEL", "openai/gpt-oss-120b")
 
     # Fallback config (OpenRouter)
     fallback_api_key = os.getenv("FALLBACK_API_KEY", "").strip()
