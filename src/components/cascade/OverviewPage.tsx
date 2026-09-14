@@ -256,7 +256,7 @@ const COMMON_CROPS = [
 // ---------------------------------------------------------------------------
 
 export function OverviewPage() {
-  const { primaryFarm } = useIdentity();
+  const { primaryFarm, activeFarmerId } = useIdentity();
   const navigate = useNavigate();
 
   const lat = primaryFarm?.lat ?? null;
@@ -273,7 +273,7 @@ export function OverviewPage() {
     }
   }, [farmCrop]);
 
-  const { result, status, error, refresh } = useCascade(lat, lng, selectedCrop);
+  const { result, status, error, refresh } = useCascade(lat, lng, selectedCrop, activeFarmerId);
 
   const bandCfg = result ? BAND_CONFIG[result.viabilityBand] : null;
   const BandIcon = bandCfg?.icon ?? Info;

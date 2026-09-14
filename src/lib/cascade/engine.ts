@@ -315,18 +315,65 @@ function scorePowerNode(): NodeScore {
   };
 }
 
-/** Labour — static placeholder until network has critical mass. */
-function scoreLabourNode(): NodeScore {
-  return {
+/**
+ * Labour: real signal from the Saath marketplace's nearby 'labour'-type
+ * listings, gated by overall nearby network density. Below the density
+ * gate this honestly reports "not enough data" rather than treating low
+ * Saath adoption in an area as if it were confirmed labour scarcity — the
+ * same honesty discipline as the market node's seasonal-baseline fallback.
+ */
+const LABOUR_DENSITY_GATE = 3;
+
+function scoreLabourNode(inputs: CascadeInputs): NodeScore {
+  const base: Omit<NodeScore, 'level' | 'score' | 'detail' | 'dataAvailable'> = {
     nodeId: 'labour',
     label: 'Labour Availability',
     icon: 'Users',
-    level: 'unknown',
-    score: 0,
-    detail: 'Regional demand curve needs real farmer density data',
-    source: 'Not integrated — requires Saath harvest-window aggregates',
-    dataAvailable: false,
+    source: 'Saath marketplace (nearby labour listings)',
   };
+
+  const labour = inputs.labour;
+  if (!labour) {
+    return {
+      ...base,
+      level: 'unknown',
+      score: 0,
+      detail: 'Labour availability data unavailable',
+      dataAvailable: false,
+    };
+  }
+
+  const { nearbyLabourCount, nearbyTotalListingsCount } = labour;
+
+  if (nearbyTotalListingsCount < LABOUR_DENSITY_GATE) {
+    return {
+      ...base,
+      level: 'unknown',
+      score: 0,
+      detail: 'Not enough Saath network activity nearby yet to assess labour availability',
+      dataAvailable: false,
+    };
+  }
+
+  let level: RiskLevel;
+  let score: number;
+  let detail: string;
+
+  if (nearbyLabourCount === 0) {
+    level = 'elevated';
+    score = 0.5;
+    detail = 'No labour listings posted nearby despite active local Saath network — may indicate scarcity';
+  } else if (nearbyLabourCount <= 2) {
+    level = 'moderate';
+    score = 0.3;
+    detail = `Only ${nearbyLabourCount} labour listing${nearbyLabourCount === 1 ? '' : 's'} nearby`;
+  } else {
+    level = 'low';
+    score = 0.1;
+    detail = `${nearbyLabourCount} labour listings available nearby`;
+  }
+
+  return { ...base, level, score, detail, dataAvailable: true };
 }
 
 /** Input — static placeholder. */
@@ -465,7 +512,7 @@ export function computeCascade(inputs: CascadeInputs): CascadeResult {
     scoreHazardNode(inputs),
     scoreCreditNode(),
     scorePowerNode(),
-    scoreLabourNode(),
+    scoreLabourNode(inputs),
     scoreInputNode(),
   ];
 

@@ -319,12 +319,12 @@ export default function TeamPanel() {
                     </span>
                     <button
                       onClick={async () => {
-                        const link = `${window.location.origin}/sign-up?invite=${inv.code}`;
+                        const link = `${window.location.origin}/join?invite=${inv.code}`;
                         await navigator.clipboard.writeText(link);
-                        toast.success('Sign-up link copied — share with the farmer!');
+                        toast.success('Join link copied — share with the farmer!');
                       }}
                       className="text-muted-foreground hover:text-primary"
-                      title="Copy sign-up link"
+                      title="Copy join link"
                     >
                       <Link className="w-3.5 h-3.5" />
                     </button>

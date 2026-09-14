@@ -168,13 +168,13 @@ function NodeDetail({ node }: { node: NodeScore }) {
 export function NodeDetailPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { primaryFarm } = useIdentity();
+  const { primaryFarm, activeFarmerId } = useIdentity();
 
   const lat = primaryFarm?.lat ?? null;
   const lng = primaryFarm?.lng ?? null;
   const crop = (primaryFarm?.crops?.[0] ?? primaryFarm?.primary_crop ?? 'wheat').toLowerCase();
 
-  const { result, status } = useCascade(lat, lng, crop);
+  const { result, status } = useCascade(lat, lng, crop, activeFarmerId);
 
   const requestedNode = params.get('node') as NodeId | null;
   const node = result?.allNodes.find((n) => n.nodeId === requestedNode) ?? result?.allNodes[0] ?? null;
