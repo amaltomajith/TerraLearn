@@ -291,23 +291,36 @@ async def _load_role_mcp_tools(role: Optional[str]) -> list:
     """Raw (unbound) MCP tool templates for a role, cached per role value.
     'farmer'/'both' get the Farmer MCP tool set, 'buyer'/'both' get the Buyer
     MCP set. Any other value (including None) gets neither — fails safe to
-    native-tools-only rather than silently granting both."""
-    if role not in _MCP_TOOLS_CACHE:
-        servers = {}
-        if role in ("farmer", "both"):
-            servers["farmer"] = {"url": f"{_mcp_base_url()}/mcp/farmer/mcp", "transport": "streamable_http"}
-        if role in ("buyer", "both"):
-            servers["buyer"] = {"url": f"{_mcp_base_url()}/mcp/buyer/mcp", "transport": "streamable_http"}
-        if not servers:
-            _MCP_TOOLS_CACHE[role] = []
-        else:
-            try:
-                client = MultiServerMCPClient(servers)
-                _MCP_TOOLS_CACHE[role] = await client.get_tools()
-            except Exception as e:
-                logger.warning("MCP tool loading failed for role=%s (falling back to native tools only): %s", role, e)
-                _MCP_TOOLS_CACHE[role] = []
-    return _MCP_TOOLS_CACHE[role]
+    native-tools-only rather than silently granting both.
+
+    Only a SUCCESSFUL fetch is cached. A transient failure (e.g. the MCP
+    server not up yet on a cold start) must not be remembered forever —
+    caching `[]` on exception previously meant one early failure permanently
+    disabled Farmer/Buyer MCP tools for that role until the worker process
+    restarted. Found by live-testing /mcp-trace against the deployed
+    backend: every farmer-role request was silently running native-tools-only
+    because of exactly this."""
+    if role in _MCP_TOOLS_CACHE:
+        return _MCP_TOOLS_CACHE[role]
+
+    servers = {}
+    if role in ("farmer", "both"):
+        servers["farmer"] = {"url": f"{_mcp_base_url()}/mcp/farmer/mcp", "transport": "streamable_http"}
+    if role in ("buyer", "both"):
+        servers["buyer"] = {"url": f"{_mcp_base_url()}/mcp/buyer/mcp", "transport": "streamable_http"}
+    if not servers:
+        _MCP_TOOLS_CACHE[role] = []
+        return []
+
+    try:
+        client = MultiServerMCPClient(servers)
+        tools = await client.get_tools()
+    except Exception as e:
+        logger.warning("MCP tool loading failed for role=%s (will retry next call): %s", role, e)
+        return []
+
+    _MCP_TOOLS_CACHE[role] = tools
+    return tools
 
 
 def _bind_identity(tool, farmer_id: str):
