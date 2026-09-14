@@ -65,10 +65,17 @@ class MandiInputs:
 
 
 @dataclass
+class LabourInputs:
+    nearby_labour_count: int
+    nearby_total_listings_count: int
+
+
+@dataclass
 class CascadeInputs:
     climate_trends: Optional[ClimateTrends]
     soil: Optional[SoilInputs]
     mandi: Optional[MandiInputs]
+    labour: Optional[LabourInputs] = None
 
 
 def _score_water_node(inputs: CascadeInputs) -> NodeScore:
@@ -226,13 +233,40 @@ def _score_power_node() -> NodeScore:
     )
 
 
-def _score_labour_node() -> NodeScore:
-    return NodeScore(
-        node_id="labour", label="Labour Availability", icon="Users",
-        level="unknown", score=0,
-        detail="Regional demand curve needs real farmer density data",
-        source="Not integrated — requires Saath harvest-window aggregates", data_available=False,
-    )
+_LABOUR_DENSITY_GATE = 3
+
+
+def _score_labour_node(inputs: CascadeInputs) -> NodeScore:
+    """Real signal from the Saath marketplace's nearby 'labour'-type
+    listings, gated by overall nearby network density — mirrors
+    src/lib/cascade/engine.ts's scoreLabourNode exactly. Below the density
+    gate this honestly reports 'not enough data' rather than treating low
+    Saath adoption in an area as confirmed labour scarcity."""
+    base = dict(node_id="labour", label="Labour Availability", icon="Users",
+                source="Saath marketplace (nearby labour listings)")
+
+    labour = inputs.labour
+    if not labour:
+        return NodeScore(**base, level="unknown", score=0,
+                          detail="Labour availability data unavailable", data_available=False)
+
+    if labour.nearby_total_listings_count < _LABOUR_DENSITY_GATE:
+        return NodeScore(**base, level="unknown", score=0,
+                          detail="Not enough Saath network activity nearby yet to assess labour availability",
+                          data_available=False)
+
+    count = labour.nearby_labour_count
+    if count == 0:
+        level, score = "elevated", 0.5
+        detail = "No labour listings posted nearby despite active local Saath network — may indicate scarcity"
+    elif count <= 2:
+        level, score = "moderate", 0.3
+        detail = f"Only {count} labour listing{'' if count == 1 else 's'} nearby"
+    else:
+        level, score = "low", 0.1
+        detail = f"{count} labour listings available nearby"
+
+    return NodeScore(**base, level=level, score=score, detail=detail, data_available=True)
 
 
 def _score_input_node() -> NodeScore:
@@ -313,7 +347,7 @@ def compute_cascade(inputs: CascadeInputs) -> dict:
         _score_hazard_node(inputs),
         _score_credit_node(),
         _score_power_node(),
-        _score_labour_node(),
+        _score_labour_node(inputs),
         _score_input_node(),
     ]
 

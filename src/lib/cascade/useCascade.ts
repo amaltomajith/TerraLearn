@@ -7,6 +7,7 @@ import {
   fetchSoilData,
   fetchMandiPrices,
 } from '@/lib/api';
+import { getFeed } from '@/lib/saath/queries';
 import { computeCascade } from './engine';
 import type { CascadeResult } from './types';
 
@@ -23,6 +24,7 @@ export function useCascade(
   lat: number | null,
   lng: number | null,
   crop: string,
+  farmerId: string | null,
 ): UseCascadeReturn {
   const [result, setResult] = useState<CascadeResult | null>(null);
   const [status, setStatus] = useState<CascadeStatus>('idle');
@@ -44,13 +46,16 @@ export function useCascade(
 
     (async () => {
       try {
-        const [climateTrends, soil, mandiPrices] = await Promise.allSettled([
+        const [climateTrends, soil, mandiPrices, nearbyListings] = await Promise.allSettled([
           fetchClimateTrends(lat, lng),
           fetchSoilData(lat, lng),
           fetchMandiPrices(crop),
+          farmerId ? getFeed(farmerId) : Promise.resolve(null),
         ]);
 
         if (ctrl.signal.aborted) return;
+
+        const listings = nearbyListings.status === 'fulfilled' ? nearbyListings.value : null;
 
         const computed = computeCascade({
           climateTrends:
@@ -58,6 +63,12 @@ export function useCascade(
           soil: soil.status === 'fulfilled' ? soil.value : null,
           mandiPrices:
             mandiPrices.status === 'fulfilled' ? mandiPrices.value : null,
+          labour: listings
+            ? {
+                nearbyTotalListingsCount: listings.length,
+                nearbyLabourCount: listings.filter((l) => l.type === 'labour').length,
+              }
+            : null,
           crop,
           lat,
           lng,
@@ -74,7 +85,7 @@ export function useCascade(
 
     return () => ctrl.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lat, lng, crop, tick]);
+  }, [lat, lng, crop, farmerId, tick]);
 
   return { result, status, error, refresh };
 }

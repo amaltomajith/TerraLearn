@@ -71,6 +71,17 @@ export interface CascadeInputs {
     trendPct: number;
     latestPerTon: number;
   } | null;
+  /**
+   * Real Saath-network signal for the labour node: nearby 'labour'-type
+   * listings (supply) vs. total nearby listings of any type (a network-
+   * density gate — with adoption still growing, zero labour listings near a
+   * farm with almost no listings at all means "not enough data," not
+   * "genuine scarcity"). Null when the fetch failed.
+   */
+  labour: {
+    nearbyLabourCount: number;
+    nearbyTotalListingsCount: number;
+  } | null;
   crop: string;
   lat: number;
   lng: number;

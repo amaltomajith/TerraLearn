@@ -56,7 +56,7 @@ from app.services.climate_extras import (
     fetch_elevation,
     fetch_soil_moisture,
 )
-from app.rules.cascade import compute_cascade, CascadeInputs, ClimateTrends, SoilInputs, MandiInputs
+from app.rules.cascade import compute_cascade, CascadeInputs, ClimateTrends, SoilInputs, MandiInputs, LabourInputs
 from app.rules.vayu import (
     compute_spi,
     latest_spi,
@@ -256,7 +256,19 @@ def get_farm_risk_assessment(farmer_id: str) -> dict:
         if price.get("available"):
             mandi_inputs = MandiInputs(trend_pct=price["trend_pct"], latest_per_ton=price["latest_price"])
 
-    result = compute_cascade(CascadeInputs(climate_trends=climate_trends, soil=soil_inputs, mandi=mandi_inputs))
+    labour_inputs = None
+    try:
+        nearby = public.rpc("nearby_listings", {"p_farmer_id": farmer_id, "p_radius_m": 20000})
+        labour_inputs = LabourInputs(
+            nearby_total_listings_count=len(nearby),
+            nearby_labour_count=sum(1 for r in nearby if r.get("type") == "labour"),
+        )
+    except Exception as e:
+        logger.warning("nearby_listings fetch failed for cascade labour node: %s", e)
+
+    result = compute_cascade(CascadeInputs(
+        climate_trends=climate_trends, soil=soil_inputs, mandi=mandi_inputs, labour=labour_inputs,
+    ))
     return {"available": True, "crop": crop or None, **result}
 
 
