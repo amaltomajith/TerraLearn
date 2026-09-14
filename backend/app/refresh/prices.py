@@ -11,6 +11,7 @@ Every exception is caught here — a refresh failure must never raise past the
 import os
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 import httpx
 
@@ -93,6 +94,14 @@ def _fetch_one(client: httpx.Client, api_key: str, crop_key: str, commodity: str
         "trend_pct": trend_pct,
         "sample_size": len(window),
         "source": "agmarknet",
+        # fetched_at's table default (`now()`) only fires on INSERT — the
+        # upsert() below does a merge-duplicates UPDATE on every subsequent
+        # refresh, which never touches a column absent from the payload.
+        # Without this, fetched_at silently freezes at first-insert time
+        # forever, even though the row is being genuinely re-verified against
+        # live Agmarknet data on every scheduled refresh. Found by running
+        # this refresh live and confirming fetched_at didn't move.
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
