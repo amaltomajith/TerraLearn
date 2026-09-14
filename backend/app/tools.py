@@ -4,6 +4,8 @@ import logging
 import httpx
 from langchain_core.tools import tool
 
+from app.services.climate import fetch_air_quality
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,37 +20,11 @@ def get_climate_aqi_data(lat: float, lng: float) -> str:
         "location": {"latitude": lat, "longitude": lng}
     }
 
-    # 1. Air Quality Data
-    try:
-        aq_url = (
-            f"https://air-quality-api.open-meteo.com/v1/air-quality"
-            f"?latitude={lat}&longitude={lng}"
-            f"&hourly=pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide,us_aqi"
-            f"&current=pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide,us_aqi"
-            f"&timezone=auto"
-        )
-        with httpx.Client(timeout=10.0, verify=False) as client:
-            resp = client.get(aq_url)
-            if resp.status_code == 200:
-                aq_data = resp.json()
-                curr = aq_data.get("current", {})
-                hourly = aq_data.get("hourly", {})
-                last_idx = len(hourly.get("time", [])) - 1 if hourly.get("time") else 0
-
-                pm25_series = [v for v in hourly.get("pm2_5", []) if v is not None]
-                avg_recent_pm25 = round(sum(pm25_series) / len(pm25_series), 1) if pm25_series else None
-
-                summary["air_quality"] = {
-                    "us_aqi": curr.get("us_aqi") if curr.get("us_aqi") is not None else (hourly.get("us_aqi", [0])[last_idx] if hourly.get("us_aqi") else 0),
-                    "pm2_5_ug_m3": curr.get("pm2_5") if curr.get("pm2_5") is not None else (hourly.get("pm2_5", [0])[last_idx] if hourly.get("pm2_5") else 0),
-                    "pm10_ug_m3": curr.get("pm10") if curr.get("pm10") is not None else (hourly.get("pm10", [0])[last_idx] if hourly.get("pm10") else 0),
-                    "ozone_ug_m3": curr.get("ozone") if curr.get("ozone") is not None else (hourly.get("ozone", [0])[last_idx] if hourly.get("ozone") else 0),
-                    "nitrogen_dioxide_ug_m3": curr.get("nitrogen_dioxide"),
-                    "sulphur_dioxide_ug_m3": curr.get("sulphur_dioxide"),
-                    "recent_pm2_5_avg": avg_recent_pm25,
-                }
-    except Exception as e:
-        summary["air_quality_error"] = str(e)
+    # 1. Air Quality Data — shared with app/mcp/farmer_server.py's
+    # get_farm_snapshot via app/services/climate.fetch_air_quality, so a
+    # farmer sees the same AQI numbers whether asked by coordinate here or by
+    # farmer_id there.
+    summary.update(fetch_air_quality(lat, lng))
 
     # 2. 5-Year Climate Archive
     try:

@@ -49,13 +49,38 @@ from app.rules.crop_database import CROP_DATABASE
 from app.rules.crop_calendar import build_crop_timeline
 from app.rules.advisories import crop_advisories, AdvisoryInput, ClimateInput, SoilInput
 from app.soil import get_soil_data
+from app.services.climate import fetch_air_quality
+from app.services.climate_extras import (
+    fetch_climate_archive,
+    fetch_rainfall_forecast,
+    fetch_elevation,
+    fetch_soil_moisture,
+)
+from app.rules.cascade import compute_cascade, CascadeInputs, ClimateTrends, SoilInputs, MandiInputs
+from app.rules.vayu import (
+    compute_spi,
+    latest_spi,
+    classify_rain,
+    derive_susceptibility,
+    derive_flood_action,
+    derive_drought_action,
+    count_dry_spell_days,
+)
 from app.ivr.escalation import escalate
 
 logger = logging.getLogger(__name__)
 
 def _allowed_hosts() -> list[str]:
-    raw = os.getenv("MCP_ALLOWED_HOSTS", "127.0.0.1:8000,localhost:8000")
-    return [h.strip() for h in raw.split(",") if h.strip()]
+    # agent.py always self-calls this server via loopback (http://127.0.0.1:$PORT
+    # or http://localhost:$PORT) regardless of the public hostname, so those
+    # must always be allowed alongside whatever MCP_ALLOWED_HOSTS configures —
+    # replacing the default with only the public hostname (as render.yaml did)
+    # made every self-call 421 "Invalid Host header", which silently broke
+    # MCP tool loading in production. Found via live-testing /mcp-trace.
+    port = os.getenv("PORT", "8000")
+    self_call_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+    configured = {h.strip() for h in os.getenv("MCP_ALLOWED_HOSTS", "").split(",") if h.strip()}
+    return list(self_call_hosts | configured)
 
 
 # mcp 1.x's FastMCP takes stateless_http/json_response/transport_security as
@@ -165,7 +190,9 @@ def _parse_date(s: str | None) -> date | None:
 
 @mcp.tool()
 def get_farm_snapshot(farmer_id: str) -> dict:
-    """Soil, climate and the active crop cycle for a farmer's primary farm."""
+    """Soil, climate, air quality and the active crop cycle for a farmer's
+    primary farm — the single tool to answer 'what's my farm situation right
+    now?' with zero coordinates required from the caller."""
     farm, cycle = _farm_and_cycle(farmer_id)
     if not farm:
         return {"available": False, "reason": "no farm found for this farmer_id"}
@@ -173,6 +200,7 @@ def get_farm_snapshot(farmer_id: str) -> dict:
     coords = owner.farm_location(farm["id"])
     weather = _weather_for(*coords) if coords else {"weather_source": "unavailable", "fetched_at": None}
     soil = get_soil_data(*coords) if coords else None
+    air_quality = fetch_air_quality(*coords) if coords else {"air_quality_error": "coordinates unavailable"}
 
     return {
         "available": True,
@@ -181,6 +209,8 @@ def get_farm_snapshot(farmer_id: str) -> dict:
             "label": farm.get("label"),
             "primary_crop": farm.get("primary_crop"),
             "enterprises": farm.get("enterprises"),
+            "lat": coords[0] if coords else None,
+            "lng": coords[1] if coords else None,
         },
         "crop_cycle": cycle and {
             "crop": cycle.get("crop"),
@@ -192,6 +222,94 @@ def get_farm_snapshot(farmer_id: str) -> dict:
         "soil": soil and {
             "pH": soil.ph, "nitrogen": soil.nitrogen, "phosphorus": soil.phosphorus,
             "potassium": soil.potassium, "source": soil.source, "fetched_at": soil.fetched_at,
+        },
+        **air_quality,
+    }
+
+
+@mcp.tool()
+def get_farm_risk_assessment(farmer_id: str) -> dict:
+    """Season viability assessment (Cascade engine) for a farmer's primary
+    farm — a viability band (good/fair/elevated/critical) with named risk
+    drivers across water, soil, market and hazard exposure, the same model
+    the web dashboard's Cascade page shows. Use for questions like 'should I
+    sell now or wait', 'is my season at risk', or 'what should I watch out
+    for'. Never returns a bare risk number — always a band + explanation."""
+    farm, cycle = _farm_and_cycle(farmer_id)
+    if not farm:
+        return {"available": False, "reason": "no farm found for this farmer_id"}
+
+    coords = owner.farm_location(farm["id"])
+    if not coords:
+        return {"available": False, "reason": "no coordinates on file for this farm"}
+
+    archive = fetch_climate_archive(*coords)
+    climate_trends = ClimateTrends(**archive) if archive.get("time") else None
+
+    soil_data = get_soil_data(*coords)
+    soil_inputs = SoilInputs(ph=soil_data.ph, nitrogen=soil_data.nitrogen, source=soil_data.source) if soil_data else None
+
+    crop = (farm.get("primary_crop") or (cycle or {}).get("crop") or "").strip()
+    mandi_inputs = None
+    if crop:
+        price = get_mandi_price(crop)
+        if price.get("available"):
+            mandi_inputs = MandiInputs(trend_pct=price["trend_pct"], latest_per_ton=price["latest_price"])
+
+    result = compute_cascade(CascadeInputs(climate_trends=climate_trends, soil=soil_inputs, mandi=mandi_inputs))
+    return {"available": True, "crop": crop or None, **result}
+
+
+@mcp.tool()
+def get_flood_drought_outlook(farmer_id: str) -> dict:
+    """Flood and drought early warning for a farmer's primary farm — the
+    same SPI-3/SPI-6 drought index and terrain flood-susceptibility model
+    the web dashboard's Vayu page shows, driven by real Open-Meteo forecast
+    and archive data. Use for questions about upcoming rain risk, whether to
+    delay irrigation or harvest, or general flood/drought concern."""
+    farm, _ = _farm_and_cycle(farmer_id)
+    if not farm:
+        return {"available": False, "reason": "no farm found for this farmer_id"}
+
+    coords = owner.farm_location(farm["id"])
+    if not coords:
+        return {"available": False, "reason": "no coordinates on file for this farm"}
+
+    archive = fetch_climate_archive(*coords)
+    forecast = fetch_rainfall_forecast(*coords)
+    elevation_m = fetch_elevation(*coords)
+    soil_moisture = fetch_soil_moisture(*coords)
+
+    spi3 = compute_spi(archive["time"], archive["precipitation_sum"], 3)
+    spi6 = compute_spi(archive["time"], archive["precipitation_sum"], 6)
+    latest3 = latest_spi(spi3)
+    dry_spell_days = count_dry_spell_days(archive["time"], archive["precipitation_sum"])
+    severity = latest3["severity"] if latest3 else "near-normal"
+
+    forecast_mm = forecast["precipitation_sum"]
+    max_mm = max(forecast_mm) if forecast_mm else 0
+    max_class = classify_rain(max_mm)
+    susceptibility = derive_susceptibility(elevation_m)
+
+    return {
+        "available": True,
+        "drought": {
+            "spi3": spi3,
+            "spi6": spi6,
+            "latest_spi3": latest3,
+            "dry_spell_days": dry_spell_days,
+            "soil_moisture_0_7cm": soil_moisture["sm0_7cm"],
+            "soil_moisture_7_28cm": soil_moisture["sm7_28cm"],
+            "action": derive_drought_action(severity, soil_moisture["sm0_7cm"]),
+        },
+        "flood": {
+            "elevation_m": elevation_m,
+            "susceptibility": susceptibility,
+            "seven_day_forecast_mm": forecast_mm,
+            "max_forecast_mm": max_mm,
+            "max_forecast_class": max_class,
+            "seven_day_total_mm": round(sum(forecast_mm), 1),
+            "action": derive_flood_action(susceptibility, max_mm, max_class),
         },
     }
 

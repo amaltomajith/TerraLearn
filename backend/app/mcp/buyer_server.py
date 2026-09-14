@@ -38,8 +38,16 @@ from app.refresh.supabase_admin import insert as service_insert
 logger = logging.getLogger(__name__)
 
 def _allowed_hosts() -> list[str]:
-    raw = os.getenv("MCP_ALLOWED_HOSTS", "127.0.0.1:8000,localhost:8000")
-    return [h.strip() for h in raw.split(",") if h.strip()]
+    # agent.py always self-calls this server via loopback (http://127.0.0.1:$PORT
+    # or http://localhost:$PORT) regardless of the public hostname, so those
+    # must always be allowed alongside whatever MCP_ALLOWED_HOSTS configures —
+    # replacing the default with only the public hostname (as render.yaml did)
+    # made every self-call 421 "Invalid Host header", which silently broke
+    # MCP tool loading in production. Found via live-testing /mcp-trace.
+    port = os.getenv("PORT", "8000")
+    self_call_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+    configured = {h.strip() for h in os.getenv("MCP_ALLOWED_HOSTS", "").split(",") if h.strip()}
+    return list(self_call_hosts | configured)
 
 
 # See farmer_server.py's matching comment: mcp 1.x's FastMCP takes these as
