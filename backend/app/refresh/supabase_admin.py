@@ -60,6 +60,17 @@ def is_configured() -> bool:
     return bool(_SUPABASE_URL and _SERVICE_ROLE_KEY)
 
 
+def debug_status() -> str:
+    """Masked, log-safe summary of what this module actually resolved
+    SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY to at import time — for a startup
+    log line, not for exposing the key. Added after a deployed environment
+    reported 'not configured' even after the Render dashboard was supposedly
+    updated, to make the actual runtime state visible in Render's own logs
+    instead of guessing."""
+    masked_key = f"{_SERVICE_ROLE_KEY[:6]}...{_SERVICE_ROLE_KEY[-4:]}" if len(_SERVICE_ROLE_KEY) > 10 else "(unset)"
+    return f"url={_SUPABASE_URL or '(unset)'}, service_role_key={masked_key}"
+
+
 def select(table: str, params: Optional[dict] = None) -> list[dict]:
     """GET /rest/v1/<table>?<params> — service role bypasses RLS entirely, so
     callers MUST apply their own filters (e.g. farmer_id=eq.<id>) via `params`."""
