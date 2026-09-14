@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { UserPlus, ArrowRight } from 'lucide-react';
@@ -22,6 +22,7 @@ const field =
 
 export default function JoinFarm() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { ownFarmer, refresh } = useIdentity();
 
   // Profile fields (only needed when ownFarmer doesn't exist yet)
@@ -30,8 +31,13 @@ export default function JoinFarm() {
   const [village, setVillage] = useState('');
   const [language, setLanguage] = useState('kn');
 
-  // Invite code
-  const [code, setCode] = useState('');
+  // Invite code — pre-filled from a shared /join?invite=CODE link (see
+  // TeamPanel.tsx's "Copy join link" button) so the worker doesn't have to
+  // manually type or be read a code over the phone. Still editable in case
+  // they arrive without a link and were just told the code.
+  const [code, setCode] = useState(
+    () => (searchParams.get('invite') ?? '').toUpperCase().replace(/[^A-Z0-9]/g, ''),
+  );
   const [busy, setBusy] = useState(false);
 
   const needsProfile = !ownFarmer;

@@ -20,7 +20,7 @@ export function SignInPage() {
         routing="path"
         path="/sign-in"
         signUpUrl="/sign-up"
-        forceRedirectUrl="/dashboard"
+        fallbackRedirectUrl="/dashboard"
         appearance={clerkAppearance}
       />
     </Shell>
@@ -34,7 +34,7 @@ export function SignUpPage() {
         routing="path"
         path="/sign-up"
         signInUrl="/sign-in"
-        forceRedirectUrl="/dashboard"
+        fallbackRedirectUrl="/dashboard"
         appearance={clerkAppearance}
       />
     </Shell>
