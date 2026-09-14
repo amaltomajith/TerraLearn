@@ -18,6 +18,16 @@ try:
 except Exception as e:  # pragma: no cover
     logger.warning("RAG module import failed: %s", e)
 
+try:
+    from app.refresh.supabase_admin import is_configured as _supabase_admin_configured, debug_status as _supabase_admin_status
+    logger.info(
+        "Supabase service-role (Farmer/Buyer MCP owner-scoped reads): %s (%s)",
+        "configured" if _supabase_admin_configured() else "NOT configured",
+        _supabase_admin_status(),
+    )
+except Exception as e:  # pragma: no cover
+    logger.warning("supabase_admin module import failed: %s", e)
+
 # Farmer + Buyer MCP servers (Puppeteer MCP spec §1/§3/§4) — both built
 # BEFORE the FastAPI() app so their lifespans can be shared. Mounting mcp's
 # streamable_http_app() into an existing app WITHOUT sharing its lifespan
